@@ -1,0 +1,25 @@
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum* ./
+RUN go mod download
+
+# Copy source
+COPY rest-api/ ./rest-api/
+
+# Build
+RUN CGO_ENABLED=0 GOOS=linux go build -o /rest-api-simulator ./rest-api
+
+# Runtime image
+FROM alpine:3.18
+
+RUN apk --no-cache add ca-certificates wget
+
+COPY --from=builder /rest-api-simulator /usr/local/bin/
+
+EXPOSE 8082
+
+ENTRYPOINT ["rest-api-simulator"]
+CMD ["-port", "8082", "-buffer", "1000", "-generate", "5000"]
