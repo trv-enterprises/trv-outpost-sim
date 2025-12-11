@@ -132,18 +132,29 @@ func initSensors() {
 
 	sensors = make([]*SensorSimulator, config.NumSensors)
 	for i := 0; i < config.NumSensors; i++ {
-		st := sensorTypes[i%len(sensorTypes)]
+		// Distribute by location first, then by type
+		// This gives multiple sensors of same type at different locations
+		locIdx := i % len(locations)
+		typeIdx := (i / len(locations)) % len(sensorTypes)
+		st := sensorTypes[typeIdx]
 		sensors[i] = &SensorSimulator{
 			id:         fmt.Sprintf("sensor-%03d", i+1),
 			sensorType: st.sType,
 			unit:       st.unit,
-			location:   locations[i%len(locations)],
-			baseValue:  st.baseValue,
+			location:   locations[locIdx],
+			baseValue:  st.baseValue + (rand.Float64()*4 - 2), // Slight variation per sensor
 			amplitude:  st.amplitude,
 			noise:      st.noise,
 			phase:      rand.Float64() * 2 * math.Pi,
 		}
 	}
+
+	// Log sensor distribution
+	typeCounts := make(map[string]int)
+	for _, s := range sensors {
+		typeCounts[s.sensorType]++
+	}
+	log.Printf("Sensor distribution: %v", typeCounts)
 }
 
 func (s *SensorSimulator) generateReading() SensorReading {

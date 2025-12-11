@@ -54,7 +54,7 @@ services:
     environment:
       WS_PORT: 8081
       WS_INTERVAL_MS: ${WS_INTERVAL_MS:-1000}
-      WS_NUM_SENSORS: ${WS_NUM_SENSORS:-5}
+      WS_NUM_SENSORS: ${WS_NUM_SENSORS:-20}
       WS_ENABLE_NOISE: ${WS_ENABLE_NOISE:-true}
       WS_ANOMALY_RATE: ${WS_ANOMALY_RATE:-0.02}
     healthcheck:

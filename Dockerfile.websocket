@@ -21,5 +21,10 @@ COPY --from=builder /websocket-simulator /usr/local/bin/
 
 EXPOSE 8081
 
-ENTRYPOINT ["websocket-simulator"]
-CMD ["-port", "8081", "-interval", "1000", "-sensors", "5"]
+# Use shell form to allow environment variable substitution
+CMD websocket-simulator \
+    -port ${WS_PORT:-8081} \
+    -interval ${WS_INTERVAL_MS:-1000} \
+    -sensors ${WS_NUM_SENSORS:-20} \
+    -noise=${WS_ENABLE_NOISE:-true} \
+    -anomaly-rate ${WS_ANOMALY_RATE:-0.02}
