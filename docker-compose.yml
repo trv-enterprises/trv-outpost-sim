@@ -1,16 +1,43 @@
-version: '3.8'
+# Simulator Services - Migrated to trv-srv-001 (100.127.19.27)
+# Project: simulators
+# Port range: 21xxx
 
 services:
+  # ts-store - Time-series circular buffer store
+  # Build context: ~/ts-store (sibling directory on target server)
+  tsstore:
+    build:
+      context: ${TSSTORE_BUILD_CONTEXT:-../ts-store}
+      dockerfile: Dockerfile
+    container_name: simulators-tsstore
+    ports:
+      - "21080:8080"
+    volumes:
+      - tsstore-data:/data
+    environment:
+      - TSSTORE_MODE=release
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    networks:
+      - simulators_network
+    labels:
+      - "project=simulators"
+
   # PostgreSQL database with timeseries data
   postgres:
     image: postgres:15-alpine
-    container_name: sensor-db
+    container_name: simulators-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: sensors
     ports:
-      - "5432:5432"
+      - "21432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-seed/init.sql:/docker-entrypoint-initdb.d/01-init.sql
@@ -20,14 +47,16 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - simulator-net
+      - simulators_network
+    labels:
+      - "project=simulators"
 
   # Database seeder - seeds historical data
   db-seeder:
     build:
       context: .
       dockerfile: Dockerfile.seeder
-    container_name: sensor-db-seeder
+    container_name: simulators-db-seeder
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,38 +70,51 @@ services:
       DAYS_BACK: ${DAYS_BACK:-7}
       INTERVAL_SECONDS: ${INTERVAL_SECONDS:-60}
     networks:
-      - simulator-net
+      - simulators_network
+    labels:
+      - "project=simulators"
 
   # WebSocket sensor simulator
+  # Reads from ts-store if available, falls back to generated data
   websocket-simulator:
     build:
       context: .
       dockerfile: Dockerfile.websocket
-    container_name: sensor-websocket
+    container_name: simulators-websocket
     ports:
-      - "8081:8081"
+      - "21081:8081"
+    depends_on:
+      tsstore:
+        condition: service_healthy
     environment:
       WS_PORT: 8081
       WS_INTERVAL_MS: ${WS_INTERVAL_MS:-1000}
-      WS_NUM_SENSORS: ${WS_NUM_SENSORS:-20}
+      WS_NUM_SENSORS: ${WS_NUM_SENSORS:-50}
       WS_ENABLE_NOISE: ${WS_ENABLE_NOISE:-true}
-      WS_ANOMALY_RATE: ${WS_ANOMALY_RATE:-0.02}
+      WS_ANOMALY_RATE: ${WS_ANOMALY_RATE:-0.002}
+      # ts-store integration (internal network)
+      TSSTORE_URL: http://tsstore:8080
+      TSSTORE_STORE_NAME: sensor-readings
+      TSSTORE_API_KEY: ${TSSTORE_API_KEY}
+      WS_USE_TSSTORE: ${WS_USE_TSSTORE:-true}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
       interval: 10s
       timeout: 5s
       retries: 3
     networks:
-      - simulator-net
+      - simulators_network
+    labels:
+      - "project=simulators"
 
   # REST API sensor simulator
   rest-api-simulator:
     build:
       context: .
       dockerfile: Dockerfile.restapi
-    container_name: sensor-rest-api
+    container_name: simulators-rest-api
     ports:
-      - "8082:8082"
+      - "21082:8082"
     environment:
       API_PORT: 8082
       API_BUFFER_SIZE: ${API_BUFFER_SIZE:-1000}
@@ -83,23 +125,51 @@ services:
       timeout: 5s
       retries: 3
     networks:
-      - simulator-net
+      - simulators_network
+    labels:
+      - "project=simulators"
 
   # Static file server for CSV
   csv-server:
     image: nginx:alpine
-    container_name: sensor-csv-server
+    container_name: simulators-csv-server
     ports:
-      - "8083:80"
+      - "21083:80"
     volumes:
       - ./data:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
-      - simulator-net
+      - simulators_network
+    labels:
+      - "project=simulators"
+
+  # Data writer - generates sensor data and writes to ts-store
+  data-writer:
+    build:
+      context: ./data-writer
+      dockerfile: Dockerfile
+    container_name: simulators-data-writer
+    depends_on:
+      tsstore:
+        condition: service_healthy
+    environment:
+      TSSTORE_URL: http://tsstore:8080
+      TSSTORE_STORE_NAME: sensor-readings
+      TSSTORE_API_KEY: ${TSSTORE_API_KEY}
+      INTERVAL_MS: ${DATA_WRITER_INTERVAL_MS:-1000}
+      ENABLE_NOISE: ${DATA_WRITER_NOISE:-true}
+      ANOMALY_RATE: ${DATA_WRITER_ANOMALY_RATE:-0.002}
+    restart: unless-stopped
+    networks:
+      - simulators_network
+    labels:
+      - "project=simulators"
 
 volumes:
   postgres_data:
+  tsstore-data:
 
 networks:
-  simulator-net:
+  simulators_network:
     driver: bridge
+    name: simulators_network

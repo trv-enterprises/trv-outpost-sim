@@ -17,18 +17,31 @@ make down
 
 ## Services & Endpoints
 
+**Production (trv-srv-001 - 100.127.19.27):**
+
 | Service | Endpoint | Description |
 |---------|----------|-------------|
-| WebSocket | `ws://localhost:8081/ws` | Real-time sensor readings |
-| REST API | `http://localhost:8082/api/*` | RESTful sensor data |
-| PostgreSQL | `localhost:5432` | Timeseries database |
-| CSV | `http://localhost:8083/sensor_readings.csv` | Static CSV file |
+| ts-store | `http://100.127.19.27:21080` | Time-series circular buffer store |
+| WebSocket | `ws://100.127.19.27:21081/ws` | Real-time sensor readings |
+| REST API | `http://100.127.19.27:21082/api/*` | RESTful sensor data |
+| CSV | `http://100.127.19.27:21083/sensor_readings.csv` | Static CSV file |
+| PostgreSQL | `100.127.19.27:21432` | Timeseries database |
+
+**Local Development (localhost):**
+
+| Service | Endpoint | Description |
+|---------|----------|-------------|
+| ts-store | `http://localhost:21080` | Time-series circular buffer store |
+| WebSocket | `ws://localhost:21081/ws` | Real-time sensor readings |
+| REST API | `http://localhost:21082/api/*` | RESTful sensor data |
+| CSV | `http://localhost:21083/sensor_readings.csv` | Static CSV file |
+| PostgreSQL | `localhost:21432` | Timeseries database |
 
 ## WebSocket Simulator
 
 Broadcasts sensor readings at a configurable interval.
 
-**Connection:** `ws://localhost:8081/ws`
+**Connection:** `ws://localhost:21081/ws` (or `ws://100.127.19.27:21081/ws` in production)
 
 **Message Format:**
 ```json
@@ -52,10 +65,10 @@ Broadcasts sensor readings at a configurable interval.
 **Configuration (via HTTP):**
 ```bash
 # Get config
-curl http://localhost:8081/config
+curl http://localhost:21081/config
 
 # Update interval
-curl -X POST http://localhost:8081/config \
+curl -X POST http://localhost:21081/config \
   -H "Content-Type: application/json" \
   -d '{"interval_ms": 500}'
 ```
@@ -85,7 +98,7 @@ Provides RESTful access to sensor readings with pagination and filtering.
 
 **Example:**
 ```bash
-curl "http://localhost:8082/api/readings?limit=10&sensor_id=sensor-001"
+curl "http://localhost:21082/api/readings?limit=10&sensor_id=sensor-001"
 ```
 
 ## PostgreSQL Database
@@ -94,8 +107,8 @@ Timeseries database with historical sensor data.
 
 **Connection:**
 ```
-Host: localhost
-Port: 5432
+Host: localhost (or 100.127.19.27 in production)
+Port: 21432
 User: postgres
 Password: postgres
 Database: sensors
@@ -137,7 +150,7 @@ WHERE s.sensor_type = 'temperature'
 
 Static CSV available via HTTP.
 
-**URL:** `http://localhost:8083/sensor_readings.csv`
+**URL:** `http://localhost:21083/sensor_readings.csv`
 
 **Columns:**
 - `timestamp` - ISO 8601 timestamp
@@ -209,7 +222,7 @@ make dev-seed
   "type": "socket",
   "config": {
     "socket": {
-      "url": "ws://localhost:8081/ws",
+      "url": "ws://100.127.19.27:21081/ws",
       "protocol": "websocket",
       "message_format": "json",
       "reconnect_on_error": true,
@@ -227,7 +240,7 @@ make dev-seed
   "config": {
     "sql": {
       "driver": "postgres",
-      "connection_string": "host=localhost port=5432 user=postgres password=postgres dbname=sensors sslmode=disable"
+      "connection_string": "host=100.127.19.27 port=21432 user=postgres password=postgres dbname=sensors sslmode=disable"
     }
   }
 }
@@ -240,7 +253,7 @@ make dev-seed
   "type": "api",
   "config": {
     "api": {
-      "url": "http://localhost:8082/api/readings/latest",
+      "url": "http://100.127.19.27:21082/api/readings/latest",
       "method": "GET"
     }
   }
@@ -254,7 +267,7 @@ make dev-seed
   "type": "csv",
   "config": {
     "csv": {
-      "path": "http://localhost:8083/sensor_readings.csv",
+      "path": "http://100.127.19.27:21083/sensor_readings.csv",
       "has_header": true,
       "delimiter": ","
     }

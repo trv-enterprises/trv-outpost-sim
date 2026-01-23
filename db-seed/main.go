@@ -35,34 +35,26 @@ type sensorType struct {
 }
 
 var sensorTypes = []sensorType{
-	{"temperature", "°C", 22.0, 8.0, 0.5, -20.0, 60.0},
-	{"humidity", "%", 50.0, 20.0, 2.0, 0.0, 100.0},
-	{"pressure", "hPa", 1013.25, 15.0, 1.0, 970.0, 1050.0},
-	{"co2", "ppm", 450.0, 150.0, 15.0, 300.0, 2000.0},
-	{"light", "lux", 400.0, 350.0, 25.0, 0.0, 2000.0},
-	{"voltage", "V", 120.0, 3.0, 0.2, 110.0, 130.0},
-	{"current", "A", 15.0, 5.0, 0.3, 0.0, 30.0},
-	{"power", "W", 1800.0, 600.0, 20.0, 0.0, 5000.0},
-	{"vibration", "mm/s", 2.5, 1.5, 0.2, 0.0, 10.0},
-	{"flow_rate", "L/min", 75.0, 25.0, 3.0, 0.0, 200.0},
+	// Temperature: 70°F base (~21°C), slow drift between 68-72°F (20-22°C), extreme up to 85°F (~29°C)
+	// Using Fahrenheit values directly since unit is °F
+	{"temperature", "°F", 70.0, 2.0, 0.1, 60.0, 90.0},
+	{"humidity", "%", 50.0, 10.0, 1.0, 20.0, 80.0},
+	{"pressure", "hPa", 1013.25, 5.0, 0.5, 990.0, 1030.0},
+	{"co2", "ppm", 450.0, 50.0, 5.0, 350.0, 800.0},
+	{"light", "lux", 400.0, 100.0, 10.0, 100.0, 1000.0},
+	{"voltage", "V", 120.0, 2.0, 0.1, 115.0, 125.0},
+	{"current", "A", 15.0, 3.0, 0.2, 5.0, 25.0},
+	{"power", "W", 1800.0, 300.0, 15.0, 500.0, 3500.0},
+	{"vibration", "mm/s", 2.5, 0.5, 0.1, 0.5, 5.0},
+	{"flow_rate", "L/min", 75.0, 10.0, 1.5, 40.0, 120.0},
 }
 
 var locations = []string{
-	"Building-A/Floor-1",
-	"Building-A/Floor-2",
-	"Building-A/Floor-3",
-	"Building-B/Floor-1",
-	"Building-B/Floor-2",
-	"Warehouse/Zone-1",
-	"Warehouse/Zone-2",
-	"Warehouse/Zone-3",
-	"Server-Room/Rack-1",
-	"Server-Room/Rack-2",
-	"Manufacturing/Line-1",
-	"Manufacturing/Line-2",
-	"External/North",
-	"External/South",
-	"HVAC/Unit-1",
+	"Building-A",
+	"Building-B",
+	"Warehouse",
+	"Server-Room",
+	"Manufacturing",
 }
 
 func main() {
@@ -208,45 +200,57 @@ func seedData(db *sql.DB, config Config) error {
 	_, _ = db.Exec("TRUNCATE TABLE sensor_readings CASCADE")
 	_, _ = db.Exec("TRUNCATE TABLE sensors CASCADE")
 
-	// Create sensors
-	log.Printf("Creating %d sensors...", config.NumSensors)
-	sensors := make([]struct {
-		id        string
-		sType     sensorType
-		location  string
-		phase     float64
-	}, config.NumSensors)
+	// Create sensors: all sensor types in each location
+	// This creates len(sensorTypes) * len(locations) sensors (e.g., 10 types * 5 locations = 50 sensors)
+	numSensors := len(sensorTypes) * len(locations)
+	log.Printf("Creating %d sensors (%d types x %d locations)...", numSensors, len(sensorTypes), len(locations))
 
-	for i := 0; i < config.NumSensors; i++ {
-		sensorID := fmt.Sprintf("sensor-%03d", i+1)
-		st := sensorTypes[i%len(sensorTypes)]
-		loc := locations[i%len(locations)]
-		phase := rand.Float64() * 2 * math.Pi
+	type sensorState struct {
+		id              string
+		sType           sensorType
+		location        string
+		phase           float64
+		currentValue    float64   // Track current value for smooth drift
+		anomalyActive   bool      // Is an anomaly event happening?
+		anomalyEnd      time.Time // When does the anomaly end?
+		anomalyTarget   float64   // Target value during anomaly
+	}
 
-		sensors[i] = struct {
-			id        string
-			sType     sensorType
-			location  string
-			phase     float64
-		}{sensorID, st, loc, phase}
+	sensors := make([]*sensorState, 0, numSensors)
 
-		_, err := db.Exec(`
-			INSERT INTO sensors (sensor_id, sensor_type, unit, location, min_value, max_value)
-			VALUES ($1, $2, $3, $4, $5, $6)
-			ON CONFLICT (sensor_id) DO UPDATE SET
-				sensor_type = EXCLUDED.sensor_type,
-				unit = EXCLUDED.unit,
-				location = EXCLUDED.location
-		`, sensorID, st.name, st.unit, loc, st.min, st.max)
-		if err != nil {
-			return fmt.Errorf("failed to insert sensor %s: %w", sensorID, err)
+	sensorIndex := 0
+	for _, loc := range locations {
+		for _, st := range sensorTypes {
+			sensorIndex++
+			sensorID := fmt.Sprintf("sensor-%03d", sensorIndex)
+			phase := rand.Float64() * 2 * math.Pi
+
+			sensors = append(sensors, &sensorState{
+				id:           sensorID,
+				sType:        st,
+				location:     loc,
+				phase:        phase,
+				currentValue: st.baseValue,
+			})
+
+			_, err := db.Exec(`
+				INSERT INTO sensors (sensor_id, sensor_type, unit, location, min_value, max_value)
+				VALUES ($1, $2, $3, $4, $5, $6)
+				ON CONFLICT (sensor_id) DO UPDATE SET
+					sensor_type = EXCLUDED.sensor_type,
+					unit = EXCLUDED.unit,
+					location = EXCLUDED.location
+			`, sensorID, st.name, st.unit, loc, st.min, st.max)
+			if err != nil {
+				return fmt.Errorf("failed to insert sensor %s: %w", sensorID, err)
+			}
 		}
 	}
 
 	// Generate readings
 	endTime := time.Now()
 	startTime := endTime.AddDate(0, 0, -config.DaysBack)
-	totalReadings := int(endTime.Sub(startTime).Seconds()) / config.Interval * config.NumSensors
+	totalReadings := int(endTime.Sub(startTime).Seconds()) / config.Interval * numSensors
 
 	log.Printf("Generating %d readings (%d days of data)...", totalReadings, config.DaysBack)
 
@@ -271,34 +275,77 @@ func seedData(db *sql.DB, config Config) error {
 
 	for currentTime.Before(endTime) {
 		for _, sensor := range sensors {
-			// Generate value with sinusoidal pattern
+			// Calculate target value based on slow drift pattern
 			hours := currentTime.Sub(startTime).Hours()
-			dayPhase := (float64(currentTime.Hour()) / 24.0) * 2 * math.Pi // Daily cycle
 
-			value := sensor.sType.baseValue +
-				sensor.sType.amplitude*math.Sin(hours/12+sensor.phase) + // Long-term trend
-				(sensor.sType.amplitude/2)*math.Sin(dayPhase) +           // Daily cycle
-				(rand.Float64()*2-1)*sensor.sType.noise                    // Noise
+			// Very slow sinusoidal drift over 24-48 hour periods
+			slowDrift := sensor.sType.amplitude * math.Sin(hours/36+sensor.phase)
+
+			// Slight daily variation (smaller amplitude)
+			dayPhase := (float64(currentTime.Hour()) / 24.0) * 2 * math.Pi
+			dailyVar := (sensor.sType.amplitude / 4) * math.Sin(dayPhase)
+
+			// Calculate normal target value
+			normalTarget := sensor.sType.baseValue + slowDrift + dailyVar
+
+			// Check if we should start a new anomaly (0.2% chance per reading, ~1-2 per day per sensor)
+			if !sensor.anomalyActive && rand.Float64() < 0.002 {
+				sensor.anomalyActive = true
+				// Anomaly lasts 3-10 minutes
+				anomalyDuration := time.Duration(3+rand.Intn(8)) * time.Minute
+				sensor.anomalyEnd = currentTime.Add(anomalyDuration)
+
+				// For temperature, spike up toward 85°F; for others, spike toward max
+				if sensor.sType.name == "temperature" {
+					sensor.anomalyTarget = 80.0 + rand.Float64()*5.0 // 80-85°F
+				} else {
+					// Spike to 70-90% of max range
+					rangeSize := sensor.sType.max - sensor.sType.min
+					sensor.anomalyTarget = sensor.sType.baseValue + rangeSize*0.3*(0.7+rand.Float64()*0.2)
+				}
+			}
+
+			// Check if anomaly should end
+			if sensor.anomalyActive && currentTime.After(sensor.anomalyEnd) {
+				sensor.anomalyActive = false
+			}
+
+			// Determine target value
+			var targetValue float64
+			if sensor.anomalyActive {
+				targetValue = sensor.anomalyTarget
+			} else {
+				targetValue = normalTarget
+			}
+
+			// Smooth transition: move current value toward target (drift speed)
+			// Move ~10% of the way toward target each reading for smooth transitions
+			driftRate := 0.1
+			if sensor.anomalyActive {
+				driftRate = 0.15 // Slightly faster rise during anomaly
+			}
+			sensor.currentValue = sensor.currentValue + (targetValue-sensor.currentValue)*driftRate
+
+			// Add tiny noise
+			value := sensor.currentValue + (rand.Float64()*2-1)*sensor.sType.noise
 
 			// Clamp to valid range
 			value = math.Max(sensor.sType.min, math.Min(sensor.sType.max, value))
 			value = math.Round(value*100) / 100
 
-			// Determine status
+			// Determine status based on deviation from base
 			status := "normal"
 			quality := 95 + rand.Intn(6)
 
-			rangePercent := (value - sensor.sType.min) / (sensor.sType.max - sensor.sType.min)
-			if rangePercent < 0.1 || rangePercent > 0.9 {
-				status = "warning"
-				quality = 70 + rand.Intn(20)
-			}
+			deviation := math.Abs(value - sensor.sType.baseValue)
+			normalRange := sensor.sType.amplitude * 1.5 // Values within 1.5x amplitude are normal
 
-			// Random anomalies (2% chance)
-			if rand.Float64() < 0.02 {
+			if deviation > normalRange*2 {
 				status = "error"
 				quality = 30 + rand.Intn(40)
-				value *= 0.5 + rand.Float64() // Anomalous value
+			} else if deviation > normalRange {
+				status = "warning"
+				quality = 70 + rand.Intn(20)
 			}
 
 			_, err := stmt.Exec(currentTime, sensor.id, value, quality, status)
