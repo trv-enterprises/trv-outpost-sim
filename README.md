@@ -26,6 +26,8 @@ make down
 | REST API | `http://100.127.19.27:21082/api/*` | RESTful sensor data |
 | CSV | `http://100.127.19.27:21083/sensor_readings.csv` | Static CSV file |
 | PostgreSQL | `100.127.19.27:21432` | Timeseries database |
+| Prometheus | `http://100.127.19.27:21090` | Metrics API (k3s cluster) |
+| Grafana | `http://100.127.19.27:21030` | Metrics dashboards (admin/admin) |
 
 **Local Development (localhost):**
 
@@ -36,6 +38,16 @@ make down
 | REST API | `http://localhost:21082/api/*` | RESTful sensor data |
 | CSV | `http://localhost:21083/sensor_readings.csv` | Static CSV file |
 | PostgreSQL | `localhost:21432` | Timeseries database |
+
+**Kubernetes/Monitoring (trv-srv-001 only):**
+
+| Service | Endpoint | Description |
+|---------|----------|-------------|
+| k3s API | `https://100.127.19.27:6443` | Kubernetes API server |
+| Prometheus | `http://100.127.19.27:21090` | Prometheus UI & API |
+| Grafana | `http://100.127.19.27:21030` | Grafana dashboards (admin/admin) |
+
+The k3s cluster runs `kube-prometheus-stack` which includes Prometheus, Grafana, Alertmanager, node-exporter, and kube-state-metrics. Available metrics include `node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `container_cpu_usage_seconds_total`, etc.
 
 ## WebSocket Simulator
 
