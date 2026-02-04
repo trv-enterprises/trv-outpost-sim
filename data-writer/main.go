@@ -273,7 +273,7 @@ func writeToTSStore(client *http.Client, config Config, reading SensorReading) e
 		return fmt.Errorf("failed to marshal reading: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/api/stores/%s/json", config.TSStoreURL, config.StoreName)
+	url := fmt.Sprintf("%s/api/stores/%s/data", config.TSStoreURL, config.StoreName)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

@@ -17,17 +17,25 @@ make down
 
 ## Services & Endpoints
 
-**Production (trv-srv-001 - 100.127.19.27):**
+**Simulators (LXD container - 100.70.88.83 via Tailscale):**
 
 | Service | Endpoint | Description |
 |---------|----------|-------------|
-| ts-store | `http://100.127.19.27:21080` | Time-series circular buffer store |
-| WebSocket | `ws://100.127.19.27:21081/ws` | Real-time sensor readings |
-| REST API | `http://100.127.19.27:21082/api/*` | RESTful sensor data |
-| CSV | `http://100.127.19.27:21083/sensor_readings.csv` | Static CSV file |
-| PostgreSQL | `100.127.19.27:21432` | Timeseries database |
-| Prometheus | `http://100.127.19.27:21090` | Metrics API (k3s cluster) |
-| Grafana | `http://100.127.19.27:21030` | Metrics dashboards (admin/admin) |
+| ts-store | `http://100.70.88.83:21080` | Time-series circular buffer store |
+| WebSocket | `ws://100.70.88.83:21081/ws` | Real-time sensor readings |
+| REST API | `http://100.70.88.83:21082/api/*` | RESTful sensor data |
+| CSV | `http://100.70.88.83:21083/sensor_readings.csv` | Static CSV file |
+| PostgreSQL | `100.70.88.83:21432` | Timeseries database |
+
+**Kubernetes/Monitoring (trv-srv-001 - 100.127.19.27):**
+
+| Service | Endpoint | Description |
+|---------|----------|-------------|
+| k3s API | `https://100.127.19.27:6443` | Kubernetes API server |
+| Prometheus | `http://100.127.19.27:21090` | Prometheus UI & API |
+| Grafana | `http://100.127.19.27:21030` | Grafana dashboards (admin/admin) |
+
+The k3s cluster runs `kube-prometheus-stack` which includes Prometheus, Grafana, Alertmanager, node-exporter, and kube-state-metrics. Available metrics include `node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `container_cpu_usage_seconds_total`, etc.
 
 **Local Development (localhost):**
 
@@ -39,21 +47,55 @@ make down
 | CSV | `http://localhost:21083/sensor_readings.csv` | Static CSV file |
 | PostgreSQL | `localhost:21432` | Timeseries database |
 
-**Kubernetes/Monitoring (trv-srv-001 only):**
+## LXD Container Setup
 
-| Service | Endpoint | Description |
-|---------|----------|-------------|
-| k3s API | `https://100.127.19.27:6443` | Kubernetes API server |
-| Prometheus | `http://100.127.19.27:21090` | Prometheus UI & API |
-| Grafana | `http://100.127.19.27:21030` | Grafana dashboards (admin/admin) |
+The simulators run in an LXD container on trv-srv-001 with its own Tailscale IP (100.70.88.83). This keeps the simulators isolated from production services on the host.
 
-The k3s cluster runs `kube-prometheus-stack` which includes Prometheus, Grafana, Alertmanager, node-exporter, and kube-state-metrics. Available metrics include `node_cpu_seconds_total`, `node_memory_MemAvailable_bytes`, `container_cpu_usage_seconds_total`, etc.
+### Container Management
+
+```bash
+# SSH to host server
+ssh tviviano@100.127.19.27
+
+# List containers
+lxc list
+
+# Access container shell
+lxc exec simulators -- bash
+
+# View simulator logs
+lxc exec simulators -- docker compose -f /root/simulators/docker-compose.yml logs -f
+
+# Restart simulators
+lxc exec simulators -- docker compose -f /root/simulators/docker-compose.yml restart
+
+# Stop/start container
+lxc stop simulators
+lxc start simulators
+```
+
+### Updating ts-store Binary
+
+The ts-store binary is downloaded from GitHub releases. To update to the latest version:
+
+```bash
+# Get latest release version
+curl -s https://api.github.com/repos/trv-enterprises/ts-store/releases/latest | jq -r '.tag_name'
+
+# Update Dockerfile.tsstore with new version URL, then rebuild
+lxc exec simulators -- bash -c 'cd /root/simulators && docker compose build tsstore && docker compose up -d tsstore'
+```
+
+Or download the latest binary directly:
+```bash
+curl -sL $(curl -s https://api.github.com/repos/trv-enterprises/ts-store/releases/latest | jq -r '.assets[] | select(.name | contains("amd64")) | .browser_download_url') -o tsstore
+```
 
 ## WebSocket Simulator
 
 Broadcasts sensor readings at a configurable interval.
 
-**Connection:** `ws://localhost:21081/ws` (or `ws://100.127.19.27:21081/ws` in production)
+**Connection:** `ws://localhost:21081/ws` (or `ws://100.70.88.83:21081/ws` on the LXD container)
 
 **Message Format:**
 ```json
@@ -119,7 +161,7 @@ Timeseries database with historical sensor data.
 
 **Connection:**
 ```
-Host: localhost (or 100.127.19.27 in production)
+Host: localhost (or 100.70.88.83 on the LXD container)
 Port: 21432
 User: postgres
 Password: postgres
@@ -234,7 +276,7 @@ make dev-seed
   "type": "socket",
   "config": {
     "socket": {
-      "url": "ws://100.127.19.27:21081/ws",
+      "url": "ws://100.70.88.83:21081/ws",
       "protocol": "websocket",
       "message_format": "json",
       "reconnect_on_error": true,
@@ -252,7 +294,7 @@ make dev-seed
   "config": {
     "sql": {
       "driver": "postgres",
-      "connection_string": "host=100.127.19.27 port=21432 user=postgres password=postgres dbname=sensors sslmode=disable"
+      "connection_string": "host=100.70.88.83 port=21432 user=postgres password=postgres dbname=sensors sslmode=disable"
     }
   }
 }
@@ -265,7 +307,7 @@ make dev-seed
   "type": "api",
   "config": {
     "api": {
-      "url": "http://100.127.19.27:21082/api/readings/latest",
+      "url": "http://100.70.88.83:21082/api/readings/latest",
       "method": "GET"
     }
   }
@@ -279,7 +321,7 @@ make dev-seed
   "type": "csv",
   "config": {
     "csv": {
-      "path": "http://100.127.19.27:21083/sensor_readings.csv",
+      "path": "http://100.70.88.83:21083/sensor_readings.csv",
       "has_header": true,
       "delimiter": ","
     }
