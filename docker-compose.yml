@@ -1,17 +1,21 @@
-# Simulator Services - Migrated to trv-srv-001 (100.127.19.27)
+# Simulator Services
 # Project: simulators
 # Port range: 21xxx
+#
+# For local development: copy .env.example to .env and configure
+# For LXD deployment: use trv-homelab/simulators Ansible playbook
 
 services:
   # ts-store - Time-series circular buffer store
-  # Build context: ~/ts-store (sibling directory on target server)
+  # Local dev: builds from sibling ts-store directory
+  # LXD deploy: Ansible creates Dockerfile.tsstore with GitHub release binary
   tsstore:
     build:
       context: ${TSSTORE_BUILD_CONTEXT:-../ts-store}
-      dockerfile: Dockerfile
+      dockerfile: ${TSSTORE_DOCKERFILE:-Dockerfile}
     container_name: simulators-tsstore
     ports:
-      - "21080:8080"
+      - "${TSSTORE_PORT:-21080}:${TSSTORE_INTERNAL_PORT:-8080}"
     volumes:
       - tsstore-data:/data
       - tsstore-run:/var/run/tsstore
@@ -20,7 +24,7 @@ services:
       - TSSTORE_ADMIN_KEY=${TSSTORE_ADMIN_KEY}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:${TSSTORE_INTERNAL_PORT:-8080}/health"]
       interval: 30s
       timeout: 3s
       start_period: 5s
@@ -35,16 +39,16 @@ services:
     image: postgres:15-alpine
     container_name: simulators-postgres
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: sensors
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-sensors}
     ports:
       - "21432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db-seed/init.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -53,7 +57,7 @@ services:
     labels:
       - "project=simulators"
 
-  # Database seeder - seeds historical data
+  # Database seeder - seeds historical data (runs once)
   db-seeder:
     build:
       context: .
@@ -65,9 +69,9 @@ services:
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_NAME: sensors
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-sensors}
       NUM_SENSORS: ${NUM_SENSORS:-10}
       DAYS_BACK: ${DAYS_BACK:-7}
       INTERVAL_SECONDS: ${INTERVAL_SECONDS:-60}
@@ -95,12 +99,12 @@ services:
       WS_ENABLE_NOISE: ${WS_ENABLE_NOISE:-true}
       WS_ANOMALY_RATE: ${WS_ANOMALY_RATE:-0.002}
       # ts-store integration (internal network)
-      TSSTORE_URL: http://tsstore:8080
+      TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
       TSSTORE_STORE_NAME: sensor-readings
       TSSTORE_API_KEY: ${TSSTORE_API_KEY}
       WS_USE_TSSTORE: ${WS_USE_TSSTORE:-true}
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8081/health"]
+      test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:8081/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -122,7 +126,7 @@ services:
       API_BUFFER_SIZE: ${API_BUFFER_SIZE:-1000}
       API_GENERATE_MS: ${API_GENERATE_MS:-5000}
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/health"]
+      test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:8082/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -155,7 +159,7 @@ services:
       tsstore:
         condition: service_healthy
     environment:
-      TSSTORE_URL: http://tsstore:8080
+      TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
       TSSTORE_STORE_NAME: sensor-readings
       TSSTORE_API_KEY: ${TSSTORE_API_KEY}
       INTERVAL_MS: ${DATA_WRITER_INTERVAL_MS:-1000}
