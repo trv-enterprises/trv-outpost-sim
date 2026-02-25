@@ -7,12 +7,10 @@
 
 services:
   # ts-store - Time-series circular buffer store
-  # Local dev: builds from sibling ts-store directory
-  # LXD deploy: Ansible creates Dockerfile.tsstore with GitHub release binary
+  # Production: uses GHCR image (set TSSTORE_IMAGE in .env)
+  # Local dev: set TSSTORE_IMAGE=tsstore-local and build with: docker build -t tsstore-local ../ts-store
   tsstore:
-    build:
-      context: ${TSSTORE_BUILD_CONTEXT:-../ts-store}
-      dockerfile: ${TSSTORE_DOCKERFILE:-Dockerfile}
+    image: ${TSSTORE_IMAGE:-ghcr.io/trv-enterprises/ts-store:latest}
     container_name: simulators-tsstore
     ports:
       - "${TSSTORE_PORT:-21080}:${TSSTORE_INTERNAL_PORT:-8080}"
