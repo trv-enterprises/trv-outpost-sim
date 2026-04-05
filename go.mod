@@ -1,4 +1,4 @@
-module github.com/tviviano/dashboard-simulators
+module github.com/trv-enterprises/trve-dashboard-simulators
 
 go 1.21
 
