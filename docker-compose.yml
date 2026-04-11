@@ -50,6 +50,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
     networks:
       - simulators_network
     labels:
@@ -106,6 +107,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
     networks:
       - simulators_network
     labels:
@@ -128,6 +130,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    restart: unless-stopped
     networks:
       - simulators_network
     labels:
@@ -142,6 +145,7 @@ services:
     volumes:
       - ./data:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
     networks:
       - simulators_network
     labels:
