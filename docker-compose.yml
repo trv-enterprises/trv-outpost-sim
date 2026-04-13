@@ -79,8 +79,7 @@ services:
     labels:
       - "project=simulators"
 
-  # WebSocket sensor simulator
-  # Reads from ts-store if available, falls back to generated data
+  # WebSocket sensor simulator - standalone data generation
   websocket-simulator:
     build:
       context: .
@@ -88,20 +87,12 @@ services:
     container_name: simulators-websocket
     ports:
       - "21081:8081"
-    depends_on:
-      tsstore:
-        condition: service_healthy
     environment:
       WS_PORT: 8081
       WS_INTERVAL_MS: ${WS_INTERVAL_MS:-1000}
       WS_NUM_SENSORS: ${WS_NUM_SENSORS:-50}
       WS_ENABLE_NOISE: ${WS_ENABLE_NOISE:-true}
       WS_ANOMALY_RATE: ${WS_ANOMALY_RATE:-0.002}
-      # ts-store integration (internal network)
-      TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
-      TSSTORE_STORE_NAME: sensor-readings
-      TSSTORE_API_KEY: ${TSSTORE_API_KEY}
-      WS_USE_TSSTORE: ${WS_USE_TSSTORE:-true}
     healthcheck:
       test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:8081/health"]
       interval: 10s
@@ -162,7 +153,6 @@ services:
         condition: service_healthy
     environment:
       TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
-      TSSTORE_STORE_NAME: sensor-readings
       TSSTORE_API_KEY: ${TSSTORE_API_KEY}
       INTERVAL_MS: ${DATA_WRITER_INTERVAL_MS:-1000}
       ENABLE_NOISE: ${DATA_WRITER_NOISE:-true}

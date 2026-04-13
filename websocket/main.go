@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -34,34 +33,16 @@ type SensorReading struct {
 	Quality    int     `json:"quality"`
 }
 
-// TSStoreResponse represents the response from ts-store JSON endpoint
-type TSStoreResponse struct {
-	Objects []TSStoreObject `json:"objects"`
-	Count   int             `json:"count"`
-}
-
-// TSStoreObject represents a single object from ts-store
-type TSStoreObject struct {
-	Timestamp       int64         `json:"timestamp"`
-	PrimaryBlockNum int           `json:"primary_block_num"`
-	TotalSize       int           `json:"total_size"`
-	BlockCount      int           `json:"block_count"`
-	Data            SensorReading `json:"data"`
-}
-
 // Config holds server configuration
 type Config struct {
 	Port        int
 	IntervalMs  int
-	TSStoreURL  string
-	StoreName   string
-	APIKey      string
 	NumSensors  int
 	EnableNoise bool
 	AnomalyRate float64
 }
 
-// SensorSimulator generates realistic sensor data (fallback mode)
+// SensorSimulator generates realistic sensor data
 type SensorSimulator struct {
 	id         string
 	sensorType string
@@ -80,16 +61,6 @@ var (
 	clientsMu  sync.Mutex
 	intervalMs int
 	intervalMu sync.RWMutex
-	httpClient *http.Client
-
-	// Track ts-store availability
-	tsStoreAvailable   bool
-	tsStoreAvailableMu sync.RWMutex
-	lastTSStoreCheck   time.Time
-
-	// Track last seen timestamp to avoid duplicates
-	lastSeenTimestamp   int64
-	lastSeenTimestampMu sync.Mutex
 )
 
 func init() {
@@ -100,38 +71,18 @@ func main() {
 	// Command line flags with environment variable defaults
 	flag.IntVar(&config.Port, "port", getEnvInt("WS_PORT", 8081), "WebSocket server port")
 	flag.IntVar(&config.IntervalMs, "interval", getEnvInt("WS_INTERVAL_MS", 1000), "Broadcast interval in milliseconds")
-	flag.StringVar(&config.TSStoreURL, "tsstore-url", getEnv("TSSTORE_URL", ""), "ts-store server URL (empty to disable)")
-	flag.StringVar(&config.StoreName, "store", getEnv("TSSTORE_STORE_NAME", "sensor-readings"), "ts-store store name")
-	flag.StringVar(&config.APIKey, "api-key", getEnv("TSSTORE_API_KEY", ""), "ts-store API key")
-	flag.IntVar(&config.NumSensors, "sensors", getEnvInt("WS_NUM_SENSORS", 50), "Number of sensors (fallback mode)")
-	flag.BoolVar(&config.EnableNoise, "noise", getEnvBool("WS_ENABLE_NOISE", true), "Enable random noise (fallback mode)")
-	flag.Float64Var(&config.AnomalyRate, "anomaly-rate", getEnvFloat("WS_ANOMALY_RATE", 0.02), "Anomaly rate (fallback mode)")
+	flag.IntVar(&config.NumSensors, "sensors", getEnvInt("WS_NUM_SENSORS", 50), "Number of sensors")
+	flag.BoolVar(&config.EnableNoise, "noise", getEnvBool("WS_ENABLE_NOISE", true), "Enable random noise")
+	flag.Float64Var(&config.AnomalyRate, "anomaly-rate", getEnvFloat("WS_ANOMALY_RATE", 0.02), "Anomaly rate")
 	flag.Parse()
 
 	intervalMs = config.IntervalMs
 
-	// Initialize HTTP client for ts-store
-	httpClient = &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	// Check if ts-store is configured and available
-	if config.TSStoreURL != "" && config.APIKey != "" {
-		log.Printf("ts-store configured: %s (store: %s)", config.TSStoreURL, config.StoreName)
-		checkTSStoreAvailability()
-	} else {
-		log.Printf("ts-store not configured, using fallback data generation")
-		tsStoreAvailable = false
-	}
-
-	// Initialize fallback sensors
+	// Initialize sensors
 	initSensors()
 
 	// Start broadcasting
 	go broadcastReadings()
-
-	// Start periodic ts-store health check
-	go periodicTSStoreCheck()
 
 	// HTTP handlers
 	http.HandleFunc("/ws", handleWebSocket)
@@ -140,82 +91,12 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Printf("WebSocket Sensor Simulator starting on %s", addr)
-	log.Printf("Configuration: interval=%dms, sensors=%d", config.IntervalMs, config.NumSensors)
+	log.Printf("Configuration: interval=%dms, sensors=%d", config.IntervalMs, len(sensors))
 	log.Printf("Connect via: ws://localhost%s/ws", addr)
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
-}
-
-func checkTSStoreAvailability() {
-	url := fmt.Sprintf("%s/health", config.TSStoreURL)
-	resp, err := httpClient.Get(url)
-	if err != nil {
-		tsStoreAvailableMu.Lock()
-		tsStoreAvailable = false
-		tsStoreAvailableMu.Unlock()
-		log.Printf("ts-store not available: %v", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		tsStoreAvailableMu.Lock()
-		tsStoreAvailable = true
-		tsStoreAvailableMu.Unlock()
-		log.Printf("ts-store is available")
-	} else {
-		tsStoreAvailableMu.Lock()
-		tsStoreAvailable = false
-		tsStoreAvailableMu.Unlock()
-		log.Printf("ts-store returned status: %d", resp.StatusCode)
-	}
-	lastTSStoreCheck = time.Now()
-}
-
-func periodicTSStoreCheck() {
-	ticker := time.NewTicker(30 * time.Second)
-	for range ticker.C {
-		if config.TSStoreURL != "" && config.APIKey != "" {
-			checkTSStoreAvailability()
-		}
-	}
-}
-
-func fetchFromTSStore() ([]SensorReading, error) {
-	url := fmt.Sprintf("%s/api/stores/%s/json/newest?limit=%d",
-		config.TSStoreURL, config.StoreName, config.NumSensors)
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("X-API-Key", config.APIKey)
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch from ts-store: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("ts-store returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var tsResp TSStoreResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tsResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	// Extract readings from response
-	readings := make([]SensorReading, 0, len(tsResp.Objects))
-	for _, obj := range tsResp.Objects {
-		readings = append(readings, obj.Data)
-	}
-
-	return readings, nil
 }
 
 func initSensors() {
@@ -238,26 +119,33 @@ func initSensors() {
 		{"flow_rate", "L/min", 75.0, 10.0, 1.5},
 	}
 
-	locations := []string{
-		"Building-A",
-		"Building-B",
-		"Warehouse",
-		"Server-Room",
-		"Manufacturing",
+	locations := []struct {
+		name     string
+		tempBase float64
+	}{
+		{"Building-A", 73.0},
+		{"Building-B", 73.0},
+		{"Warehouse", 80.0},
+		{"Server-Room", 67.0},
+		{"Manufacturing", 85.0},
 	}
 
-	// Create all sensor types in all locations (matching data-writer)
+	// Create all sensor types in all locations
 	sensors = make([]*SensorSimulator, 0, len(sensorTypes)*len(locations))
 	sensorIndex := 0
 	for _, loc := range locations {
 		for _, st := range sensorTypes {
 			sensorIndex++
+			base := st.baseValue + (rand.Float64()*2 - 1)
+			if st.sType == "temperature" {
+				base = loc.tempBase + (rand.Float64()*2 - 1)
+			}
 			sensors = append(sensors, &SensorSimulator{
 				id:         fmt.Sprintf("sensor-%03d", sensorIndex),
 				sensorType: st.sType,
 				unit:       st.unit,
-				location:   loc,
-				baseValue:  st.baseValue + (rand.Float64()*2 - 1),
+				location:   loc.name,
+				baseValue:  base,
 				amplitude:  st.amplitude,
 				noise:      st.noise,
 				phase:      rand.Float64() * 2 * math.Pi,
@@ -265,7 +153,7 @@ func initSensors() {
 		}
 	}
 
-	log.Printf("Initialized %d fallback sensors (%d types x %d locations)",
+	log.Printf("Initialized %d sensors (%d types x %d locations)",
 		len(sensors), len(sensorTypes), len(locations))
 }
 
@@ -311,17 +199,7 @@ func (s *SensorSimulator) generateReading() SensorReading {
 	}
 }
 
-func generateFallbackReadings() []SensorReading {
-	readings := make([]SensorReading, len(sensors))
-	for i, sensor := range sensors {
-		readings[i] = sensor.generateReading()
-	}
-	return readings
-}
-
 func broadcastReadings() {
-	var consecutiveErrors int
-
 	for {
 		intervalMu.RLock()
 		interval := intervalMs
@@ -335,66 +213,9 @@ func broadcastReadings() {
 			continue
 		}
 
-		var readings []SensorReading
-		var source string
+		for _, sensor := range sensors {
+			reading := sensor.generateReading()
 
-		// Try to fetch from ts-store first
-		tsStoreAvailableMu.RLock()
-		useTS := tsStoreAvailable
-		tsStoreAvailableMu.RUnlock()
-
-		if useTS {
-			var err error
-			readings, err = fetchFromTSStore()
-			if err != nil {
-				consecutiveErrors++
-				if consecutiveErrors == 1 || consecutiveErrors%10 == 0 {
-					log.Printf("Error fetching from ts-store (count=%d): %v", consecutiveErrors, err)
-				}
-				// Fall back to generated data
-				readings = generateFallbackReadings()
-				source = "fallback"
-			} else {
-				consecutiveErrors = 0
-				source = "ts-store"
-
-				// Filter out readings we've already sent (avoid duplicates)
-				lastSeenTimestampMu.Lock()
-				filteredReadings := make([]SensorReading, 0, len(readings))
-				var maxTimestamp int64
-				for _, r := range readings {
-					if r.Timestamp > lastSeenTimestamp {
-						filteredReadings = append(filteredReadings, r)
-					}
-					if r.Timestamp > maxTimestamp {
-						maxTimestamp = r.Timestamp
-					}
-				}
-				if maxTimestamp > lastSeenTimestamp {
-					lastSeenTimestamp = maxTimestamp
-				}
-				lastSeenTimestampMu.Unlock()
-
-				readings = filteredReadings
-
-				// If no new readings, skip this cycle
-				if len(readings) == 0 {
-					clientsMu.Unlock()
-					continue
-				}
-			}
-		} else {
-			readings = generateFallbackReadings()
-			source = "fallback"
-		}
-
-		// Log source periodically
-		if rand.Float64() < 0.01 { // 1% of broadcasts
-			log.Printf("Broadcasting %d readings from %s to %d clients", len(readings), source, len(clients))
-		}
-
-		// Broadcast readings to all connected clients
-		for _, reading := range readings {
 			data, err := json.Marshal(reading)
 			if err != nil {
 				log.Printf("Error marshaling reading: %v", err)
@@ -488,18 +309,12 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 	currentInterval := intervalMs
 	intervalMu.RUnlock()
 
-	tsStoreAvailableMu.RLock()
-	tsAvail := tsStoreAvailable
-	tsStoreAvailableMu.RUnlock()
-
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"interval_ms":      currentInterval,
-		"num_sensors":      config.NumSensors,
-		"noise":            config.EnableNoise,
-		"anomaly_rate":     config.AnomalyRate,
-		"sensors":          len(sensors),
-		"tsstore_url":      config.TSStoreURL,
-		"tsstore_available": tsAvail,
+		"interval_ms":  currentInterval,
+		"num_sensors":  config.NumSensors,
+		"noise":        config.EnableNoise,
+		"anomaly_rate": config.AnomalyRate,
+		"sensors":      len(sensors),
 	})
 }
 
@@ -511,15 +326,10 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	numClients := len(clients)
 	clientsMu.Unlock()
 
-	tsStoreAvailableMu.RLock()
-	tsAvail := tsStoreAvailable
-	tsStoreAvailableMu.RUnlock()
-
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":           "healthy",
-		"connections":      numClients,
-		"uptime":           time.Now().Unix(),
-		"tsstore_available": tsAvail,
+		"status":      "healthy",
+		"connections": numClients,
+		"uptime":      time.Now().Unix(),
 	})
 }
 

@@ -15,13 +15,11 @@ import (
 
 // Config holds the data writer configuration
 type Config struct {
-	TSStoreURL   string
-	StoreName    string
-	APIKey       string
-	NumSensors   int
-	IntervalMS   int
-	EnableNoise  bool
-	AnomalyRate  float64
+	TSStoreURL  string
+	APIKey      string
+	IntervalMS  int
+	EnableNoise bool
+	AnomalyRate float64
 }
 
 // SensorType defines a type of sensor with its characteristics
@@ -37,9 +35,7 @@ type SensorType struct {
 
 // SensorState tracks the current state of a sensor for smooth value transitions
 type SensorState struct {
-	ID            string
 	Type          SensorType
-	Location      string
 	Phase         float64
 	CurrentValue  float64
 	AnomalyActive bool
@@ -47,26 +43,16 @@ type SensorState struct {
 	AnomalyTarget float64
 }
 
-// SensorReading represents a single sensor data point
-type SensorReading struct {
-	Timestamp  int64   `json:"timestamp"`
-	SensorID   string  `json:"sensor_id"`
-	SensorType string  `json:"sensor_type"`
-	Value      float64 `json:"value"`
-	Unit       string  `json:"unit"`
-	Location   string  `json:"location"`
-	Status     string  `json:"status"`
-	Quality    int     `json:"quality"`
+// Location represents a physical location with its own ts-store repo
+type Location struct {
+	Name      string // display name
+	StoreName string // ts-store repo name
+	Sensors   []*SensorState
 }
 
-// TSStoreRequest is the request body for ts-store JSON endpoint
-type TSStoreRequest struct {
-	Data SensorReading `json:"data"`
-}
-
+// defaultSensorTypes uses a placeholder temperature base; each location overrides it
 var sensorTypes = []SensorType{
-	// Temperature: 70°F base, slow drift between 68-72°F, extreme up to 85°F
-	{"temperature", "°F", 70.0, 2.0, 0.1, 60.0, 90.0},
+	{"temperature", "°F", 0.0, 2.0, 0.1, 60.0, 95.0},
 	{"humidity", "%", 50.0, 10.0, 1.0, 20.0, 80.0},
 	{"pressure", "hPa", 1013.25, 5.0, 0.5, 990.0, 1030.0},
 	{"co2", "ppm", 450.0, 50.0, 5.0, 350.0, 800.0},
@@ -78,12 +64,14 @@ var sensorTypes = []SensorType{
 	{"flow_rate", "L/min", 75.0, 10.0, 1.5, 40.0, 120.0},
 }
 
-var locations = []string{
-	"Building-A",
-	"Building-B",
-	"Warehouse",
-	"Server-Room",
-	"Manufacturing",
+var locations = []struct {
+	Name      string
+	StoreName string
+	TempBase  float64
+}{
+	{"Warehouse", "warehouse", 80.0},
+	{"Server-Room", "server-room", 67.0},
+	{"Manufacturing", "manufacturing", 85.0},
 }
 
 func main() {
@@ -91,7 +79,6 @@ func main() {
 
 	// Command line flags
 	flag.StringVar(&config.TSStoreURL, "tsstore-url", getEnv("TSSTORE_URL", "http://localhost:8084"), "ts-store server URL")
-	flag.StringVar(&config.StoreName, "store", getEnv("TSSTORE_STORE_NAME", "sensor-readings"), "ts-store store name")
 	flag.StringVar(&config.APIKey, "api-key", getEnv("TSSTORE_API_KEY", ""), "ts-store API key")
 	flag.IntVar(&config.IntervalMS, "interval", getEnvInt("INTERVAL_MS", 1000), "Interval between readings in milliseconds")
 	flag.BoolVar(&config.EnableNoise, "noise", getEnvBool("ENABLE_NOISE", true), "Enable random noise")
@@ -104,9 +91,9 @@ func main() {
 
 	rand.Seed(time.Now().UnixNano())
 
-	// Initialize sensors: all types in all locations
-	sensors := initializeSensors()
-	log.Printf("Initialized %d sensors (%d types x %d locations)", len(sensors), len(sensorTypes), len(locations))
+	// Initialize locations with sensors
+	locs := initializeLocations()
+	log.Printf("Initialized %d locations with %d sensor types each", len(locs), len(sensorTypes))
 
 	// Create HTTP client with timeout
 	client := &http.Client{
@@ -115,7 +102,13 @@ func main() {
 
 	log.Printf("Starting data writer...")
 	log.Printf("  ts-store URL: %s", config.TSStoreURL)
-	log.Printf("  Store: %s", config.StoreName)
+	log.Printf("  Stores: %v", func() []string {
+		names := make([]string, len(locs))
+		for i, l := range locs {
+			names[i] = l.StoreName
+		}
+		return names
+	}())
 	log.Printf("  Interval: %dms", config.IntervalMS)
 	log.Printf("  Noise: %v", config.EnableNoise)
 	log.Printf("  Anomaly rate: %.3f", config.AnomalyRate)
@@ -134,14 +127,14 @@ func main() {
 	for range ticker.C {
 		currentTime := time.Now()
 
-		for _, sensor := range sensors {
-			reading := generateReading(sensor, startTime, currentTime, config.EnableNoise, config.AnomalyRate)
+		for _, loc := range locs {
+			record := generateRecord(loc, startTime, currentTime, config.EnableNoise, config.AnomalyRate)
 
-			err := writeToTSStore(client, config, reading)
+			err := writeToTSStore(client, config, loc.StoreName, record)
 			if err != nil {
 				totalErrors++
 				if totalErrors%100 == 1 {
-					log.Printf("Error writing to ts-store: %v", err)
+					log.Printf("Error writing to ts-store (%s): %v", loc.StoreName, err)
 				}
 			} else {
 				totalWritten++
@@ -158,30 +151,52 @@ func main() {
 	}
 }
 
-func initializeSensors() []*SensorState {
-	sensors := make([]*SensorState, 0, len(sensorTypes)*len(locations))
+func initializeLocations() []*Location {
+	locs := make([]*Location, 0, len(locations))
 
-	sensorIndex := 0
-	for _, loc := range locations {
-		for _, st := range sensorTypes {
-			sensorIndex++
-			sensor := &SensorState{
-				ID:           fmt.Sprintf("sensor-%03d", sensorIndex),
-				Type:         st,
-				Location:     loc,
-				Phase:        rand.Float64() * 2 * math.Pi,
-				CurrentValue: st.BaseValue,
-			}
-			sensors = append(sensors, sensor)
+	for _, locDef := range locations {
+		loc := &Location{
+			Name:      locDef.Name,
+			StoreName: locDef.StoreName,
+			Sensors:   make([]*SensorState, 0, len(sensorTypes)),
 		}
+
+		for _, st := range sensorTypes {
+			sType := st
+			if sType.Name == "temperature" {
+				sType.BaseValue = locDef.TempBase
+			}
+			sensor := &SensorState{
+				Type:         sType,
+				Phase:        rand.Float64() * 2 * math.Pi,
+				CurrentValue: sType.BaseValue,
+			}
+			loc.Sensors = append(loc.Sensors, sensor)
+		}
+
+		locs = append(locs, loc)
 	}
 
-	return sensors
+	return locs
 }
 
-func generateReading(sensor *SensorState, startTime, currentTime time.Time, enableNoise bool, anomalyRate float64) SensorReading {
+// generateRecord produces a single record with all sensor values for a location
+func generateRecord(loc *Location, startTime, currentTime time.Time, enableNoise bool, anomalyRate float64) map[string]interface{} {
+	record := map[string]interface{}{
+		"timestamp": currentTime.UnixMilli(),
+	}
+
 	hours := currentTime.Sub(startTime).Hours()
 
+	for _, sensor := range loc.Sensors {
+		value := generateValue(sensor, hours, currentTime, enableNoise, anomalyRate)
+		record[sensor.Type.Name] = value
+	}
+
+	return record
+}
+
+func generateValue(sensor *SensorState, hours float64, currentTime time.Time, enableNoise bool, anomalyRate float64) float64 {
 	// Very slow sinusoidal drift over 24-48 hour periods
 	slowDrift := sensor.Type.Amplitude * math.Sin(hours/36+sensor.Phase)
 
@@ -195,15 +210,12 @@ func generateReading(sensor *SensorState, startTime, currentTime time.Time, enab
 	// Check if we should start a new anomaly
 	if !sensor.AnomalyActive && rand.Float64() < anomalyRate {
 		sensor.AnomalyActive = true
-		// Anomaly lasts 3-10 minutes
 		anomalyDuration := time.Duration(3+rand.Intn(8)) * time.Minute
 		sensor.AnomalyEnd = currentTime.Add(anomalyDuration)
 
-		// For temperature, spike up toward 85°F; for others, spike toward max
 		if sensor.Type.Name == "temperature" {
-			sensor.AnomalyTarget = 80.0 + rand.Float64()*5.0 // 80-85°F
+			sensor.AnomalyTarget = 80.0 + rand.Float64()*5.0
 		} else {
-			// Spike to 70-90% of max range
 			rangeSize := sensor.Type.Max - sensor.Type.Min
 			sensor.AnomalyTarget = sensor.Type.BaseValue + rangeSize*0.3*(0.7+rand.Float64()*0.2)
 		}
@@ -222,10 +234,10 @@ func generateReading(sensor *SensorState, startTime, currentTime time.Time, enab
 		targetValue = normalTarget
 	}
 
-	// Smooth transition: move current value toward target
+	// Smooth transition
 	driftRate := 0.1
 	if sensor.AnomalyActive {
-		driftRate = 0.15 // Slightly faster rise during anomaly
+		driftRate = 0.15
 	}
 	sensor.CurrentValue = sensor.CurrentValue + (targetValue-sensor.CurrentValue)*driftRate
 
@@ -239,41 +251,17 @@ func generateReading(sensor *SensorState, startTime, currentTime time.Time, enab
 	value = math.Max(sensor.Type.Min, math.Min(sensor.Type.Max, value))
 	value = math.Round(value*100) / 100
 
-	// Determine status based on deviation from base
-	status := "normal"
-	quality := 95 + rand.Intn(6)
-
-	deviation := math.Abs(value - sensor.Type.BaseValue)
-	normalRange := sensor.Type.Amplitude * 1.5
-
-	if deviation > normalRange*2 {
-		status = "error"
-		quality = 30 + rand.Intn(40)
-	} else if deviation > normalRange {
-		status = "warning"
-		quality = 70 + rand.Intn(20)
-	}
-
-	return SensorReading{
-		Timestamp:  currentTime.UnixMilli(),
-		SensorID:   sensor.ID,
-		SensorType: sensor.Type.Name,
-		Value:      value,
-		Unit:       sensor.Type.Unit,
-		Location:   sensor.Location,
-		Status:     status,
-		Quality:    quality,
-	}
+	return value
 }
 
-func writeToTSStore(client *http.Client, config Config, reading SensorReading) error {
-	reqBody := TSStoreRequest{Data: reading}
+func writeToTSStore(client *http.Client, config Config, storeName string, record map[string]interface{}) error {
+	reqBody := map[string]interface{}{"data": record}
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return fmt.Errorf("failed to marshal reading: %w", err)
+		return fmt.Errorf("failed to marshal record: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/api/stores/%s/data", config.TSStoreURL, config.StoreName)
+	url := fmt.Sprintf("%s/api/stores/%s/data", config.TSStoreURL, storeName)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
