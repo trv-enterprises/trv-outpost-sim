@@ -74,6 +74,7 @@ services:
       NUM_SENSORS: ${NUM_SENSORS:-10}
       DAYS_BACK: ${DAYS_BACK:-7}
       INTERVAL_SECONDS: ${INTERVAL_SECONDS:-60}
+      LAB_CONTROL_DAYS: ${LAB_CONTROL_DAYS:-30}
     networks:
       - simulators_network
     labels:
@@ -112,10 +113,14 @@ services:
     container_name: simulators-rest-api
     ports:
       - "21082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       API_PORT: 8082
       API_BUFFER_SIZE: ${API_BUFFER_SIZE:-1000}
       API_GENERATE_MS: ${API_GENERATE_MS:-5000}
+      POSTGRES_DSN: "host=postgres port=5432 user=${POSTGRES_USER:-postgres} password=${POSTGRES_PASSWORD:-postgres} dbname=${POSTGRES_DB:-sensors} sslmode=disable"
     healthcheck:
       test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:8082/health"]
       interval: 10s
@@ -151,12 +156,15 @@ services:
     depends_on:
       tsstore:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
     environment:
       TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
       TSSTORE_API_KEY: ${TSSTORE_API_KEY}
       INTERVAL_MS: ${DATA_WRITER_INTERVAL_MS:-1000}
       ENABLE_NOISE: ${DATA_WRITER_NOISE:-true}
       ANOMALY_RATE: ${DATA_WRITER_ANOMALY_RATE:-0.002}
+      POSTGRES_DSN: "host=postgres port=5432 user=${POSTGRES_USER:-postgres} password=${POSTGRES_PASSWORD:-postgres} dbname=${POSTGRES_DB:-sensors} sslmode=disable"
     restart: unless-stopped
     networks:
       - simulators_network

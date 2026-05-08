@@ -19,4 +19,4 @@ RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /db-seeder /usr/local/bin/
 
-ENTRYPOINT ["sh", "-c", "db-seeder -host $DB_HOST -port $DB_PORT -user $DB_USER -password $DB_PASSWORD -dbname $DB_NAME -sensors ${NUM_SENSORS:-10} -days ${DAYS_BACK:-7} -interval ${INTERVAL_SECONDS:-60}"]
+ENTRYPOINT ["sh", "-c", "db-seeder -host $DB_HOST -port $DB_PORT -user $DB_USER -password $DB_PASSWORD -dbname $DB_NAME -sensors ${NUM_SENSORS:-10} -days ${DAYS_BACK:-7} -interval ${INTERVAL_SECONDS:-60} -lab-control-days ${LAB_CONTROL_DAYS:-30}"]

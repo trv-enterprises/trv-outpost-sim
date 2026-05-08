@@ -20,6 +20,7 @@ type Config struct {
 	IntervalMS  int
 	EnableNoise bool
 	AnomalyRate float64
+	PostgresDSN string // empty disables the lab-control daily loop
 }
 
 // SensorType defines a type of sensor with its characteristics
@@ -83,6 +84,7 @@ func main() {
 	flag.IntVar(&config.IntervalMS, "interval", getEnvInt("INTERVAL_MS", 1000), "Interval between readings in milliseconds")
 	flag.BoolVar(&config.EnableNoise, "noise", getEnvBool("ENABLE_NOISE", true), "Enable random noise")
 	flag.Float64Var(&config.AnomalyRate, "anomaly-rate", getEnvFloat("ANOMALY_RATE", 0.002), "Anomaly rate (0-1)")
+	flag.StringVar(&config.PostgresDSN, "postgres-dsn", getEnv("POSTGRES_DSN", ""), "Postgres DSN for lab-control daily loop (empty disables)")
 	flag.Parse()
 
 	if config.APIKey == "" {
@@ -115,6 +117,14 @@ func main() {
 
 	// Wait for ts-store to be ready
 	waitForTSStore(client, config.TSStoreURL)
+
+	// Start lab-control daily loop if a Postgres DSN is configured
+	if config.PostgresDSN != "" {
+		log.Printf("Lab-control daily loop: enabled")
+		go runLabControlDailyLoop(config.PostgresDSN)
+	} else {
+		log.Printf("Lab-control daily loop: disabled (no POSTGRES_DSN)")
+	}
 
 	// Track start time for drift calculations
 	startTime := time.Now()

@@ -59,6 +59,35 @@ FROM sensor_readings r
 JOIN sensors s ON r.sensor_id = s.sensor_id
 ORDER BY sensor_id, timestamp DESC;
 
+-- Lab control catalog (one row per QC item)
+CREATE TABLE IF NOT EXISTS lab_controls (
+    control_id   VARCHAR(50) PRIMARY KEY,
+    name         VARCHAR(100) NOT NULL,
+    analyte      VARCHAR(100) NOT NULL,
+    unit         VARCHAR(20)  NOT NULL,
+    target_mean  DECIMAL(12,4) NOT NULL,
+    target_sd    DECIMAL(12,4) NOT NULL,
+    is_active    BOOLEAN DEFAULT true,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Daily aggregates (one row per control per day, computed externally)
+-- Bands are computed from the day's own (mean, sd): mean +/- k*sd
+CREATE TABLE IF NOT EXISTS lab_control_daily (
+    control_id   VARCHAR(50)  NOT NULL REFERENCES lab_controls(control_id) ON DELETE CASCADE,
+    day          DATE         NOT NULL,
+    n            INTEGER      NOT NULL,
+    mean         DECIMAL(12,4) NOT NULL,
+    sd           DECIMAL(12,4) NOT NULL,
+    minus_2sd    DECIMAL(12,4) NOT NULL,
+    minus_1sd    DECIMAL(12,4) NOT NULL,
+    plus_1sd     DECIMAL(12,4) NOT NULL,
+    plus_2sd     DECIMAL(12,4) NOT NULL,
+    PRIMARY KEY (control_id, day)
+);
+
+CREATE INDEX IF NOT EXISTS idx_lab_control_daily_day ON lab_control_daily(day DESC);
+
 -- Sample queries for dashboard use:
 --
 -- Get latest reading for all sensors:

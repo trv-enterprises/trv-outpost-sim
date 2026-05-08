@@ -47,6 +47,7 @@ type Config struct {
 	Port          int
 	BufferSize    int
 	GenerateMs    int
+	PostgresDSN   string
 }
 
 var (
@@ -75,10 +76,12 @@ func main() {
 	flag.IntVar(&config.Port, "port", 8082, "REST API server port")
 	flag.IntVar(&config.BufferSize, "buffer", 1000, "Number of readings to keep in memory")
 	flag.IntVar(&config.GenerateMs, "generate", 5000, "Generate new readings every N milliseconds")
+	flag.StringVar(&config.PostgresDSN, "postgres-dsn", getEnv("POSTGRES_DSN", ""), "Postgres DSN for lab-control endpoints (empty disables)")
 	flag.Parse()
 
 	initSensors()
 	go generateReadings()
+	initLabControlsDB(config.PostgresDSN)
 
 	r := mux.NewRouter()
 
@@ -94,6 +97,8 @@ func main() {
 	r.HandleFunc("/api/stats", getStats).Methods("GET", "OPTIONS")
 	r.HandleFunc("/health", handleHealth).Methods("GET", "OPTIONS")
 
+	registerLabControlRoutes(r)
+
 	addr := fmt.Sprintf(":%d", config.Port)
 	log.Printf("REST API Sensor Simulator starting on %s", addr)
 	log.Printf("Configuration: buffer=%d, generate_interval=%dms", config.BufferSize, config.GenerateMs)
@@ -104,6 +109,8 @@ func main() {
 	log.Printf("  GET /api/sensors           - List all sensors")
 	log.Printf("  GET /api/sensors/{id}      - Sensor details")
 	log.Printf("  GET /api/stats             - Statistics")
+	log.Printf("  GET /api/lab-controls      - List lab controls (postgres-backed)")
+	log.Printf("  GET /api/lab-controls/{id}/daily?days=N - Daily aggregates with SD bands")
 
 	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal("ListenAndServe: ", err)

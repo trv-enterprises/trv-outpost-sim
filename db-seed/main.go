@@ -19,9 +19,10 @@ type Config struct {
 	User       string
 	Password   string
 	DBName     string
-	NumSensors int
-	DaysBack   int
-	Interval   int // seconds between readings
+	NumSensors      int
+	DaysBack        int
+	Interval        int // seconds between readings
+	LabControlDays  int // history depth for lab_control_daily
 }
 
 type sensorType struct {
@@ -67,6 +68,7 @@ func main() {
 	flag.IntVar(&config.NumSensors, "sensors", 10, "Number of sensors")
 	flag.IntVar(&config.DaysBack, "days", 30, "Days of historical data")
 	flag.IntVar(&config.Interval, "interval", 60, "Seconds between readings")
+	flag.IntVar(&config.LabControlDays, "lab-control-days", 30, "Days of historical lab control aggregates")
 	flag.Parse()
 
 	rand.Seed(time.Now().UnixNano())
@@ -188,6 +190,10 @@ func createSchema(db *sql.DB) error {
 	`)
 	if err != nil {
 		log.Printf("Warning: failed to create latest_readings view: %v", err)
+	}
+
+	if err := createLabControlSchema(db); err != nil {
+		return fmt.Errorf("failed to create lab control schema: %w", err)
 	}
 
 	log.Println("Schema created successfully")
@@ -392,6 +398,10 @@ func seedData(db *sql.DB, config Config) error {
 	log.Println("Analyzing tables...")
 	db.Exec("ANALYZE sensors")
 	db.Exec("ANALYZE sensor_readings")
+
+	if err := seedLabControls(db, config.LabControlDays); err != nil {
+		return fmt.Errorf("failed to seed lab controls: %w", err)
+	}
 
 	return nil
 }
