@@ -21,6 +21,15 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+func getEnvInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
 type LabControl struct {
 	ControlID  string  `json:"control_id"`
 	Name       string  `json:"name"`

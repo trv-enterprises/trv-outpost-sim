@@ -73,9 +73,14 @@ func init() {
 }
 
 func main() {
-	flag.IntVar(&config.Port, "port", 8082, "REST API server port")
-	flag.IntVar(&config.BufferSize, "buffer", 1000, "Number of readings to keep in memory")
-	flag.IntVar(&config.GenerateMs, "generate", 5000, "Generate new readings every N milliseconds")
+	// Defaults come from the env vars docker-compose sets (API_PORT,
+	// API_BUFFER_SIZE, API_GENERATE_MS); flags still override. Previously these
+	// env vars were silently ignored because main only read flags, so the
+	// Ansible role's API_BUFFER_SIZE knob had no effect — the container ran the
+	// Dockerfile CMD defaults regardless.
+	flag.IntVar(&config.Port, "port", getEnvInt("API_PORT", 8082), "REST API server port")
+	flag.IntVar(&config.BufferSize, "buffer", getEnvInt("API_BUFFER_SIZE", 1000), "Number of readings to keep in memory")
+	flag.IntVar(&config.GenerateMs, "generate", getEnvInt("API_GENERATE_MS", 5000), "Generate new readings every N milliseconds")
 	flag.StringVar(&config.PostgresDSN, "postgres-dsn", getEnv("POSTGRES_DSN", ""), "Postgres DSN for lab-control endpoints (empty disables)")
 	flag.Parse()
 
@@ -158,29 +163,38 @@ func initSensors() {
 	}
 
 	sensorStates = make(map[string]*sensorState)
-	sensors = make([]SensorInfo, 0)
+	sensors = make([]SensorInfo, 0, len(sensorTypes)*len(locations))
 
-	for i, st := range sensorTypes {
-		sensorID := fmt.Sprintf("sensor-%03d", i+1)
-		phase := rand.Float64() * 2 * math.Pi
+	// Fan out: every sensor type exists in every location. Without this nested
+	// loop (len(sensorTypes) == len(locations) == 5) the old i%len mapping pinned
+	// each type to exactly one location, so each location had a single,
+	// type-unique sensor — see the lockstep bug. Now each location carries all
+	// types and each type appears in all locations.
+	n := 0
+	for _, loc := range locations {
+		for _, st := range sensorTypes {
+			n++
+			sensorID := fmt.Sprintf("sensor-%03d", n)
+			phase := rand.Float64() * 2 * math.Pi
 
-		sensorStates[sensorID] = &sensorState{
-			baseValue: st.baseValue,
-			amplitude: st.amplitude,
-			noise:     st.noise,
-			phase:     phase,
-			min:       st.min,
-			max:       st.max,
+			sensorStates[sensorID] = &sensorState{
+				baseValue: st.baseValue,
+				amplitude: st.amplitude,
+				noise:     st.noise,
+				phase:     phase,
+				min:       st.min,
+				max:       st.max,
+			}
+
+			sensors = append(sensors, SensorInfo{
+				SensorID:   sensorID,
+				SensorType: st.sType,
+				Unit:       st.unit,
+				Location:   loc,
+				MinValue:   st.min,
+				MaxValue:   st.max,
+			})
 		}
-
-		sensors = append(sensors, SensorInfo{
-			SensorID:   sensorID,
-			SensorType: st.sType,
-			Unit:       st.unit,
-			Location:   locations[i%len(locations)],
-			MinValue:   st.min,
-			MaxValue:   st.max,
-		})
 	}
 
 	readings = make([]SensorReading, 0, config.BufferSize)
@@ -225,8 +239,18 @@ func generateReading(sensor SensorInfo, state *sensorState) SensorReading {
 }
 
 func generateReadings() {
-	// Generate some historical data first
-	for i := 0; i < 100; i++ {
+	// Pre-seed historical data sized to the buffer, so per-sensor history is
+	// consistent regardless of sensor count. A fixed 100 rounds left only
+	// buffer/len(sensors) readings per sensor after trimming once the count
+	// grew (e.g. 25 sensors × 100 = 2500 trimmed to a 1000 buffer = 40/sensor).
+	rounds := 100
+	if len(sensors) > 0 {
+		rounds = config.BufferSize / len(sensors)
+		if rounds < 1 {
+			rounds = 1
+		}
+	}
+	for i := 0; i < rounds; i++ {
 		for _, sensor := range sensors {
 			state := sensorStates[sensor.SensorID]
 			reading := generateReading(sensor, state)
