@@ -171,6 +171,30 @@ services:
     labels:
       - "project=simulators"
 
+  # Sensor-readings writer - combined row-per-sensor ("tidy") dataset.
+  # Writes one record per sensor per tick to the single `sensor-readings`
+  # schema store (location/sensor carried as fields). Runs ALONGSIDE
+  # data-writer's three per-location stores; does not touch them.
+  sensor-readings-writer:
+    build:
+      context: ./sensor-readings-writer
+      dockerfile: Dockerfile
+    container_name: simulators-sensor-readings-writer
+    depends_on:
+      tsstore:
+        condition: service_healthy
+    environment:
+      TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
+      TSSTORE_API_KEY: ${TSSTORE_API_KEY}
+      INTERVAL_MS: ${SENSOR_READINGS_INTERVAL_MS:-1000}
+      ENABLE_NOISE: ${SENSOR_READINGS_NOISE:-true}
+      ANOMALY_RATE: ${SENSOR_READINGS_ANOMALY_RATE:-0.002}
+    restart: unless-stopped
+    networks:
+      - simulators_network
+    labels:
+      - "project=simulators"
+
 volumes:
   postgres_data:
   tsstore-data:
