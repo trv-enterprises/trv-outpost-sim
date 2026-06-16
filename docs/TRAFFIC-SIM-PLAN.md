@@ -1,0 +1,115 @@
+# Traffic Simulator + Globe/Sankey — Plan & Handoff
+
+> **Status:** scoped, not yet started. This doc is a handoff so a fresh Claude
+> Code session in this repo has full context. Written 2026-06-16.
+
+## Goal
+
+Add a **network-traffic simulator** to this repo that **replays a real dataset**
+of traffic between geo-located endpoints, to feed two visualizations in the
+**Outpost dashboard**:
+
+1. **3D globe** — arcs between source/dest coordinates, rendered with
+   **`echarts-gl`** (`globe` + `lines3D`/flying-lines). A custom dashboard
+   component loaded via the dashboard's `DynamicComponentLoader`.
+   `echarts-gl` is **already a dependency** of the dashboard client — no new dep.
+2. **Sankey** — same data as flows between nodes (source → dest, link width = volume).
+
+One dataset feeds **both** views. The shared record shape is:
+
+```
+source { lat, lon, ip? }  →  target { lat, lon, ip? }  +  value (volume/count)
+```
+
+- Globe uses the coordinate pairs (`lines3D` wants `[[srcLon,srcLat],[dstLon,dstLat]]`).
+- Sankey uses the endpoints as nodes and `value` as link width.
+- IP on each end is a bonus: good Sankey node labels + ties a flow to an endpoint.
+
+## Dataset (DECIDED): AWS Honeypot Attack Data
+
+Chosen after a research sweep (honeypot logs are the only public data with
+real IP + geo on the source + a target + volume; CAIDA/MAWI anonymize IPs and
+have no geo, and IDS sets like CIC-IDS/UNSW-NB15 use private/lab IPs that
+geocode to nowhere).
+
+- **Source:** Kaggle — https://www.kaggle.com/datasets/casimian2000/aws-honeypot-attack-data
+- **No-login mirror to try first:** the underlying "Marx" CSV via `tcrug/marx_data` on GitHub.
+  - **⚠️ Do NOT use the `capitalone/DataProfiler` copy** — verified to be an
+    *altered test fixture* (renamed `srcip`/`srcport` cols + synthetic
+    `owner`/`comment`/`int_col` filler), NOT the canonical file.
+- **Canonical schema (15 columns):**
+  `datetime, host, src, proto, type, spt, dpt, srcstr, cc, country, locale, localeabbr, postalcode, latitude, longitude`
+  - `srcstr` = **real attacker IP** (dotted quad, not anonymized); `src` = int form
+  - `latitude` / `longitude` = **source coords, already baked in** (no GeoIP step!)
+  - `cc` / `country` / `locale` = attacker country/city
+  - `host` = which honeypot was hit (`groucho-oregon`, `groucho-singapore`,
+    `groucho-tokyo`, `groucho-us-east`, `zeppo-norcal`) → the **destination**;
+    geocode these ~5 region names ONCE, by hand (small lookup table).
+  - `spt` / `dpt` = source/dest port; `proto`, `type` = protocol/attack type
+  - **No count column** — each of ~451k rows is one attack event. Aggregate
+    (`GROUP BY srcstr` / `country` / `host`) to get link weights/arc intensity.
+- **License:** ⚠️ Kaggle page is JS-gated; license tag wasn't machine-verifiable.
+  **Confirm the license before redistributing** in any non-personal context.
+  For a personal homelab demo it's almost certainly fine.
+
+**Runner-up if license is a problem:** Hornet 40 (Stratosphere) — open download,
+real per-flow bytes/packets, 8 known dest cities, but you geocode source IPs
+with MaxMind GeoLite2, and it's **CC BY-NC-ND** (non-commercial, no-derivatives).
+
+## The spike to do FIRST (before building the full service)
+
+Low-effort, high-signal — prove the data renders the way we want before
+plumbing a new Go simulator service:
+
+1. **Fetch a sample** of the canonical honeypot CSV (mirror first; Kaggle if needed).
+   Verify it's the 15-column canonical schema, not the altered capitalone copy.
+2. **Lock the record schema** the simulator will emit (proposed below).
+3. **Build the destination lookup** — map the ~5 `host` honeypot names to lat/lon.
+4. **Produce two real echarts configs** from actual aggregated rows:
+   - a `globe` + `lines3D` config (arcs, weighted),
+   - a `sankey` config (country → host, weighted).
+   Drop them in `docs/spike/` as JSON (or a tiny HTML harness) so they can be
+   eyeballed and pasted into a dashboard dynamic component.
+5. Report: does the shape look good on both? Any aggregation tuning needed
+   (top-N countries, log-scale arc width, etc.)?
+
+### Proposed emitted record (simulator → consumers)
+
+```json
+{
+  "timestamp": 1699999999999,
+  "src": { "ip": "1.2.3.4", "country": "CN", "city": "...", "lat": 31.2, "lon": 121.5 },
+  "dst": { "host": "groucho-singapore", "lat": 1.29, "lon": 103.85 },
+  "proto": "TCP", "attack_type": "...", "spt": 51234, "dpt": 22,
+  "value": 1
+}
+```
+Aggregated view for Sankey/arc weight: `GROUP BY src.country, dst.host → sum(value)`.
+
+## Where things live (repo boundaries — IMPORTANT)
+
+- **This repo (`trv-outpost-sim`)** — the traffic simulator service (Go, same
+  pattern as the existing `data-writer` / `websocket` / `rest-api` sims). Add a
+  new service + compose entry here.
+- **Dashboard repo (`trv-enterprises/trv-outpost`)** — the globe + Sankey custom
+  components (React, loaded via `DynamicComponentLoader`). `echarts-gl` already
+  present there.
+- **`trv-homelab`** — Ansible role syncs THIS repo from `../trv-outpost-sim`.
+  Deploy via `make deploy-simulators` from `homelab-deploy`. ts-store is pinned
+  to `0.8.3` in `homelab-deploy/inventory/host_vars/simulators.yml`.
+
+## Existing simulator pattern to follow
+
+Look at `data-writer/`, `websocket/`, `rest-api/` in this repo. Each is a small
+Go service with a `Dockerfile`, wired into `docker-compose.yml`, writing to
+ts-store and/or serving an endpoint. The new traffic sim should mirror this:
+a Go service that loads the honeypot CSV (bundled in `data/`), replays rows on
+a timer, and exposes them (WebSocket stream + a ts-store schema store, likely).
+
+## Open questions for Tom
+
+- Replay cadence (real-time-ish vs. accelerated)?
+- Stream over WebSocket (like the existing sim) AND/OR write to a ts-store
+  schema store for historical query?
+- Globe: show individual flying arcs (event stream) vs. static weighted arcs
+  (aggregated)? Probably both modes.
