@@ -1,0 +1,4 @@
+# spike input data (51MB, not committed — see docs/spike/README.md)
+marx-geo.csv
+marx-geo.csv.gz
+*.csv

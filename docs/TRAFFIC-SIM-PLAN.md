@@ -1,7 +1,37 @@
 # Traffic Simulator + Globe/Sankey — Plan & Handoff
 
-> **Status:** scoped, not yet started. This doc is a handoff so a fresh Claude
-> Code session in this repo has full context. Written 2026-06-16.
+> **Status:** spike DONE (2026-06-16), decisions locked, ready to build the Go
+> service. This doc is a handoff so a fresh Claude Code session has full context.
+
+## Spike outcome (2026-06-16) — see `docs/spike/`
+
+Ran the data-shape spike against the real 451,581-row canonical CSV. Verdict:
+**shape works on both views, green light to build.** Artifacts in `docs/spike/`
+(`build_spike.py`, `globe_config.json`, `sankey_config.json`,
+`sample_records.json`, `preview.html`, `globe_preview.png`). The 51MB CSV is
+gitignored; `docs/spike/README.md` has the one-line fetch.
+
+Key findings that update this plan:
+- ✅ Canonical 15-col schema confirmed via mirror `tcrug/marx_data/marx-geo.csv.gz`
+  (NOT the altered capitalone copy).
+- ⚠️ **9 honeypot hosts, not ~5**: tokyo, oregon, singapore, us-east,
+  groucho-norcal, zeppo-norcal, sydney, sa (São Paulo), eu (Ireland). All map to
+  AWS regions; lookup table is `HOST_DEST` in `build_spike.py` — reuse it.
+- Only 3,428 rows (0.76%) lack coords → drop them. 448,153 aggregated.
+- Globe rendered great (log-scaled arc widths, flying-line trails). Sankey config
+  validated (23 nodes / 135 links, no dangling endpoints).
+- Emitted record schema confirmed, with `dst.region` added (human label).
+
+## Decisions locked (Tom, 2026-06-16)
+
+- **Transport:** WebSocket stream **AND** ts-store schema store (option 1).
+- **WS must not run dry:** loop the dataset continuously and **rewrite each
+  event's timestamp to ~now on every pass** (round-robin replay with fresh
+  timestamps). This is the explicit fix for "the stream runs dry."
+- **Cadence:** accelerated continuous loop (compress the data into a fast loop).
+- **Globe:** BOTH modes — static weighted arcs (from ts-store aggregate) as a
+  base layer + live flying arcs (from the WS event stream).
+
 
 ## Goal
 
