@@ -63,6 +63,9 @@
           "name": "N. California (us-west-1)"
         },
         {
+          "name": "N. Virginia (us-east-1)"
+        },
+        {
           "name": "Oregon (us-west-2)"
         },
         {
@@ -76,12 +79,6 @@
         },
         {
           "name": "Tokyo (ap-northeast-1)"
-        },
-        {
-          "name": "N. Virginia (us-east-1)"
-        },
-        {
-          "name": "N. California (us-west-1)"
         }
       ],
       "links": [
@@ -116,9 +113,19 @@
           "value": 16807
         },
         {
+          "source": "China",
+          "target": "N. California (us-west-1)",
+          "value": 16150
+        },
+        {
           "source": "Iran",
           "target": "Tokyo (ap-northeast-1)",
           "value": 11660
+        },
+        {
+          "source": "United States",
+          "target": "N. California (us-west-1)",
+          "value": 10703
         },
         {
           "source": "China",
@@ -141,16 +148,6 @@
           "value": 8199
         },
         {
-          "source": "China",
-          "target": "N. California (us-west-1)",
-          "value": 8129
-        },
-        {
-          "source": "China",
-          "target": "N. California (us-west-1)",
-          "value": 8021
-        },
-        {
           "source": "United States",
           "target": "N. Virginia (us-east-1)",
           "value": 7826
@@ -159,16 +156,6 @@
           "source": "Japan",
           "target": "Tokyo (ap-northeast-1)",
           "value": 7010
-        },
-        {
-          "source": "United States",
-          "target": "N. California (us-west-1)",
-          "value": 5482
-        },
-        {
-          "source": "United States",
-          "target": "N. California (us-west-1)",
-          "value": 5221
         },
         {
           "source": "United States",
@@ -226,9 +213,24 @@
           "value": 2433
         },
         {
+          "source": "Vietnam",
+          "target": "N. California (us-west-1)",
+          "value": 2382
+        },
+        {
           "source": "Brazil",
           "target": "Tokyo (ap-northeast-1)",
           "value": 2244
+        },
+        {
+          "source": "Netherlands",
+          "target": "N. California (us-west-1)",
+          "value": 2023
+        },
+        {
+          "source": "Japan",
+          "target": "N. California (us-west-1)",
+          "value": 1695
         },
         {
           "source": "Taiwan",
@@ -239,6 +241,11 @@
           "source": "Taiwan",
           "target": "Oregon (us-west-2)",
           "value": 1561
+        },
+        {
+          "source": "South Korea",
+          "target": "N. California (us-west-1)",
+          "value": 1498
         },
         {
           "source": "Germany",
@@ -281,19 +288,19 @@
           "value": 1202
         },
         {
-          "source": "Vietnam",
-          "target": "N. California (us-west-1)",
-          "value": 1196
-        },
-        {
           "source": "United Kingdom",
           "target": "Tokyo (ap-northeast-1)",
           "value": 1190
         },
         {
-          "source": "Vietnam",
+          "source": "Germany",
           "target": "N. California (us-west-1)",
-          "value": 1186
+          "value": 1174
+        },
+        {
+          "source": "Taiwan",
+          "target": "N. California (us-west-1)",
+          "value": 1173
         },
         {
           "source": "Netherlands",
@@ -321,14 +328,9 @@
           "value": 1032
         },
         {
-          "source": "Netherlands",
+          "source": "Russia",
           "target": "N. California (us-west-1)",
-          "value": 1027
-        },
-        {
-          "source": "Netherlands",
-          "target": "N. California (us-west-1)",
-          "value": 996
+          "value": 1016
         },
         {
           "source": "Netherlands",
@@ -367,28 +369,13 @@
         },
         {
           "source": "Japan",
-          "target": "N. California (us-west-1)",
-          "value": 867
-        },
-        {
-          "source": "Japan",
           "target": "Ireland (eu-west-1)",
           "value": 846
-        },
-        {
-          "source": "Japan",
-          "target": "N. California (us-west-1)",
-          "value": 828
         },
         {
           "source": "Hong Kong",
           "target": "Singapore (ap-southeast-1)",
           "value": 793
-        },
-        {
-          "source": "South Korea",
-          "target": "N. California (us-west-1)",
-          "value": 782
         },
         {
           "source": "Iran",
@@ -411,9 +398,9 @@
           "value": 724
         },
         {
-          "source": "South Korea",
+          "source": "Brazil",
           "target": "N. California (us-west-1)",
-          "value": 716
+          "value": 720
         },
         {
           "source": "Hong Kong",
@@ -424,6 +411,11 @@
           "source": "South Korea",
           "target": "Ireland (eu-west-1)",
           "value": 691
+        },
+        {
+          "source": "Canada",
+          "target": "N. California (us-west-1)",
+          "value": 690
         },
         {
           "source": "Vietnam",
@@ -451,6 +443,11 @@
           "value": 655
         },
         {
+          "source": "India",
+          "target": "N. California (us-west-1)",
+          "value": 633
+        },
+        {
           "source": "Russia",
           "target": "N. Virginia (us-east-1)",
           "value": 629
@@ -461,16 +458,6 @@
           "value": 624
         },
         {
-          "source": "Taiwan",
-          "target": "N. California (us-west-1)",
-          "value": 617
-        },
-        {
-          "source": "Germany",
-          "target": "N. California (us-west-1)",
-          "value": 600
-        },
-        {
           "source": "Germany",
           "target": "N. Virginia (us-east-1)",
           "value": 579
@@ -479,11 +466,6 @@
           "source": "United Kingdom",
           "target": "Oregon (us-west-2)",
           "value": 578
-        },
-        {
-          "source": "Germany",
-          "target": "N. California (us-west-1)",
-          "value": 574
         },
         {
           "source": "Canada",
@@ -506,9 +488,9 @@
           "value": 565
         },
         {
-          "source": "Taiwan",
+          "source": "Hong Kong",
           "target": "N. California (us-west-1)",
-          "value": 556
+          "value": 548
         },
         {
           "source": "Germany",
@@ -516,9 +498,9 @@
           "value": 548
         },
         {
-          "source": "Russia",
+          "source": "United Kingdom",
           "target": "N. California (us-west-1)",
-          "value": 544
+          "value": 532
         },
         {
           "source": "Canada",
@@ -551,11 +533,6 @@
           "value": 476
         },
         {
-          "source": "Russia",
-          "target": "N. California (us-west-1)",
-          "value": 472
-        },
-        {
           "source": "Germany",
           "target": "Ireland (eu-west-1)",
           "value": 444
@@ -582,16 +559,6 @@
         },
         {
           "source": "Brazil",
-          "target": "N. California (us-west-1)",
-          "value": 371
-        },
-        {
-          "source": "Canada",
-          "target": "N. California (us-west-1)",
-          "value": 361
-        },
-        {
-          "source": "Brazil",
           "target": "Sydney (ap-southeast-2)",
           "value": 361
         },
@@ -599,11 +566,6 @@
           "source": "Hong Kong",
           "target": "N. Virginia (us-east-1)",
           "value": 353
-        },
-        {
-          "source": "Brazil",
-          "target": "N. California (us-west-1)",
-          "value": 349
         },
         {
           "source": "Canada",
@@ -616,21 +578,6 @@
           "value": 329
         },
         {
-          "source": "Canada",
-          "target": "N. California (us-west-1)",
-          "value": 329
-        },
-        {
-          "source": "India",
-          "target": "N. California (us-west-1)",
-          "value": 321
-        },
-        {
-          "source": "India",
-          "target": "N. California (us-west-1)",
-          "value": 312
-        },
-        {
           "source": "United Kingdom",
           "target": "Sao Paulo (sa-east-1)",
           "value": 309
@@ -641,19 +588,9 @@
           "value": 306
         },
         {
-          "source": "Hong Kong",
-          "target": "N. California (us-west-1)",
-          "value": 305
-        },
-        {
           "source": "Canada",
           "target": "Sydney (ap-southeast-2)",
           "value": 287
-        },
-        {
-          "source": "United Kingdom",
-          "target": "N. California (us-west-1)",
-          "value": 283
         },
         {
           "source": "India",
@@ -684,16 +621,6 @@
           "source": "Vietnam",
           "target": "Singapore (ap-southeast-1)",
           "value": 259
-        },
-        {
-          "source": "United Kingdom",
-          "target": "N. California (us-west-1)",
-          "value": 249
-        },
-        {
-          "source": "Hong Kong",
-          "target": "N. California (us-west-1)",
-          "value": 243
         },
         {
           "source": "United Kingdom",
@@ -732,6 +659,11 @@
         },
         {
           "source": "Iran",
+          "target": "N. California (us-west-1)",
+          "value": 121
+        },
+        {
+          "source": "Iran",
           "target": "Sao Paulo (sa-east-1)",
           "value": 117
         },
@@ -744,16 +676,6 @@
           "source": "Iran",
           "target": "N. Virginia (us-east-1)",
           "value": 89
-        },
-        {
-          "source": "Iran",
-          "target": "N. California (us-west-1)",
-          "value": 61
-        },
-        {
-          "source": "Iran",
-          "target": "N. California (us-west-1)",
-          "value": 60
         },
         {
           "source": "Iran",

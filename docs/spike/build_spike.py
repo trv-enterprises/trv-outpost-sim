@@ -157,18 +157,22 @@ def main():
     }
 
     # ---- Build sankey config: country -> host weighted flows ----
+    # Region nodes must be UNIQUE by name. Note groucho-norcal + zeppo-norcal
+    # both map to "N. California (us-west-1)", so dedupe by region and merge
+    # their links — echarts Sankey crashes on duplicate node names.
     nodes = [{"name": c} for c in top_countries]
-    host_names = sorted({h for (_, h), _ in country_host.items()})
-    nodes += [{"name": HOST_DEST[h]["region"]} for h in host_names]
-    links = []
+    region_names = sorted({HOST_DEST[h]["region"] for (_, h), _ in country_host.items()})
+    nodes += [{"name": r} for r in region_names]
+
+    link_weights = Counter()  # (country, region) -> summed count
     for (country, host), c in country_host.items():
         if country not in top_set:
             continue
-        links.append({
-            "source": country,
-            "target": HOST_DEST[host]["region"],
-            "value": c,
-        })
+        link_weights[(country, HOST_DEST[host]["region"])] += c
+    links = [
+        {"source": country, "target": region, "value": c}
+        for (country, region), c in link_weights.items()
+    ]
     links.sort(key=lambda l: l["value"], reverse=True)
 
     sankey_config = {

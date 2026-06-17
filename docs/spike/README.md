@@ -10,6 +10,13 @@ Proves the AWS Honeypot ("marx-geo") dataset renders well on both target views
 - `sankey_config.json` — `sankey` country → honeypot-region flows.
 - `sample_records.json` — 5 records in the shape the Go sim will emit (schema lock).
 - `preview.html` — loads echarts + echarts-gl from CDN and renders both configs.
+- `globe_preview.png` / `sankey_preview.png` — rendered output (eyeball proof).
+
+> **Sankey gotcha (fixed):** `groucho-norcal` and `zeppo-norcal` both map to the
+> `N. California (us-west-1)` region. Emitting that as two nodes with the same
+> name crashes echarts Sankey (`Cannot set properties of undefined`). The
+> generator dedupes region nodes and merges their links — keep that invariant
+> in the Go service: **region node names must be unique.**
 
 ## Reproduce
 
