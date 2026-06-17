@@ -195,6 +195,40 @@ services:
     labels:
       - "project=simulators"
 
+  # Traffic simulator - replays the AWS Honeypot dataset to drive the Outpost
+  # 3D globe (echarts-gl attack arcs) and Sankey. Streams individual attack
+  # events over WebSocket (/ws) in an accelerated continuous loop with fresh
+  # timestamps (never runs dry), serves aggregated country->region flows at
+  # /aggregate, and writes those flows to the `traffic-flows` ts-store schema
+  # store for historical query. The store is created by the deploy.
+  traffic-writer:
+    build:
+      context: ./traffic-writer
+      dockerfile: Dockerfile
+    container_name: simulators-traffic-writer
+    ports:
+      - "21084:8085"
+    depends_on:
+      tsstore:
+        condition: service_healthy
+    environment:
+      TRAFFIC_PORT: 8085
+      TRAFFIC_EVENTS_PER_SEC: ${TRAFFIC_EVENTS_PER_SEC:-50}
+      TRAFFIC_STORE_NAME: ${TRAFFIC_STORE_NAME:-traffic-flows}
+      TRAFFIC_AGG_WRITE_SEC: ${TRAFFIC_AGG_WRITE_SEC:-60}
+      TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
+      TSSTORE_API_KEY: ${TSSTORE_API_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:8085/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - simulators_network
+    labels:
+      - "project=simulators"
+
 volumes:
   postgres_data:
   tsstore-data:
