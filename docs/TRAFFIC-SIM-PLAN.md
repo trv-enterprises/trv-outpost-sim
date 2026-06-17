@@ -32,6 +32,57 @@ Key findings that update this plan:
 - **Globe:** BOTH modes — static weighted arcs (from ts-store aggregate) as a
   base layer + live flying arcs (from the WS event stream).
 
+## Decisions locked (Tom, 2026-06-17) — deployment shape
+
+- **Dataset packaging:** **bake the gzipped CSV into the image.** Commit a
+  gzipped copy (or representative subset) into this repo (`data/`), un-ignore
+  just that file, and decompress at Docker build. Self-contained, reproducible,
+  no network at deploy time. The plain 51MB CSV stays gitignored.
+- **ts-store store creation:** **role-managed schema store** (NOT self-create at
+  startup). The new traffic schema store is declared in the trv-homelab Ansible
+  role like `sensor-readings`, and the role creates it + applies the schema +
+  reconciles the shared key before the writer starts. ts-store does NOT
+  auto-create stores, so this is required.
+
+### ⚠️ Coupled change — sim repo + trv-homelab role must land together
+
+The Go writer's emitted field set MUST exactly match the schema the role
+declares. A schema store rejects any field not declared (`field not found in
+schema: <field>`). So:
+
+- Define the traffic record schema ONCE, used in two places:
+  1. the Go struct the writer emits (this repo, `traffic-writer/`), and
+  2. `simulators_tsstore_schema_stores` in
+     `trv-homelab/tools/ansible/roles/simulators/vars/main.yml`
+     (mirror the `sensor-readings` block: `{index, name, type}` per field).
+- These two MUST agree on field names, types, and indexes. Build them as one
+  unit; the deploy (`make deploy-simulators` from `homelab-deploy`) is the
+  end-to-end proof.
+
+### Build punch list (this repo)
+
+1. `traffic-writer/` Go service — load gzipped CSV, decompress in-memory,
+   round-robin replay with timestamp→now each pass; dual output: WS stream +
+   ts-store schema-store writes. Reuse `HOST_DEST` (9 hosts) and emitted-record
+   schema from the spike (`docs/spike/build_spike.py`).
+2. `traffic-writer/Dockerfile` — mirror `data-writer/Dockerfile`; decompress the
+   baked gzip at build.
+3. Commit the gzipped dataset to `data/`; un-ignore that one file.
+4. `docker-compose.yml` — add the `traffic-writer` service (build context,
+   `TSSTORE_URL`/`TSSTORE_API_KEY`, `depends_on: tsstore`, new WS port if it
+   serves its own socket).
+
+### Handoff to trv-homelab / homelab-deploy (the deploy session does these)
+
+5. trv-homelab: add the traffic schema-store spec to `roles/simulators/vars/main.yml`
+   (must match the Go struct). If a new port is exposed, thread it through
+   `defaults/main.yml` + `templates/simulators.env.j2`.
+6. homelab-deploy: update CLAUDE.md services/ports table; `make deploy-simulators`;
+   verify `failed=0`, new store created, writer healthy, WS emitting, ts-store 0.8.3.
+
+> The globe + Sankey dashboard components are a SEPARATE track in the dashboard
+> repo (`trv-outpost`), built from the spike configs after the sim feed is live.
+
 
 ## Goal
 
