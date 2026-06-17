@@ -1,7 +1,7 @@
 {
   "backgroundColor": "#000",
   "globe": {
-    "baseTexture": "",
+    "baseTexture": "earth_dark.png",
     "shading": "color",
     "atmosphere": {
       "show": true

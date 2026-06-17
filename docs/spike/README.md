@@ -6,6 +6,11 @@ Proves the AWS Honeypot ("marx-geo") dataset renders well on both target views
 ## What's here
 
 - `build_spike.py` — reads the canonical CSV, aggregates, emits ECharts configs.
+- `make_basemap.py` — renders `earth_dark.png`, the globe `baseTexture` (dark
+  world map + country border lines) from Natural Earth GeoJSON (public domain).
+- `earth_dark.png` — committed basemap (4096x2048, ~140KB). echarts-gl has no
+  built-in Earth; the globe is a bare sphere without a `baseTexture`, which is
+  why the first spike globe had no continents. The dashboard may swap its own.
 - `globe_config.json` — `echarts-gl` `globe` + `lines3D` weighted arcs.
 - `sankey_config.json` — `sankey` country → honeypot-region flows.
 - `sample_records.json` — 5 records in the shape the Go sim will emit (schema lock).
@@ -29,7 +34,16 @@ python3 build_spike.py            # reads /tmp/marx-geo.csv by default
 # or: MARX_CSV=/path/to/marx-geo.csv python3 build_spike.py
 ```
 
-Then open `preview.html` (any static server; it fetches the JSON siblings):
+The basemap `earth_dark.png` is committed; regenerate it only if you want to
+restyle (needs Pillow — use a venv since Homebrew Python is externally managed):
+
+```sh
+curl -sL https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson -o /tmp/ne_countries.geojson
+python3 -m venv /tmp/spike-venv && /tmp/spike-venv/bin/pip install Pillow
+NE_GEOJSON=/tmp/ne_countries.geojson /tmp/spike-venv/bin/python make_basemap.py
+```
+
+Then open `preview.html` (any static server; it fetches the JSON + texture siblings):
 
 ```sh
 python3 -m http.server 8099   # then visit http://localhost:8099/preview.html

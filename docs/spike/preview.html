@@ -16,7 +16,7 @@
 </head>
 <body>
   <h2>3D Globe — weighted attack arcs (top-15 source countries → 9 honeypots)</h2>
-  <p class="note">Earth texture omitted in spike (shading: color). Dashboard supplies the texture asset.</p>
+  <p class="note">Basemap: earth_dark.png (dark world map + country borders, from make_basemap.py).</p>
   <div id="globe" class="chart"></div>
 
   <h2>Sankey — country → honeypot region, link width = attack volume</h2>
@@ -29,8 +29,6 @@
     }
     (async () => {
       const globeCfg = await load('globe_config.json');
-      // give the globe a visible base color since we skip the texture asset here
-      globeCfg.globe.baseColor = '#10243e';
       const g = echarts.init(document.getElementById('globe'));
       g.setOption(globeCfg);
 
