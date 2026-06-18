@@ -1,7 +1,9 @@
 # Traffic Simulator + Globe/Sankey — Plan & Handoff
 
-> **Status:** spike DONE (2026-06-16), decisions locked, ready to build the Go
-> service. This doc is a handoff so a fresh Claude Code session has full context.
+> **Status:** ✅ DEPLOYED & VERIFIED (2026-06-17). Sim built, schema-fixed, and
+> live on the simulators host — traffic-writer @ :21084, `traffic-flows` schema
+> store written with 0 errors against ts-store 0.8.3. Only the dashboard globe +
+> Sankey components remain (separate `trv-outpost` track). History below.
 
 ## Spike outcome (2026-06-16) — see `docs/spike/`
 
@@ -81,18 +83,33 @@ mock: 1038 flows/cycle, 0 errors). Docker image builds.
 **Store name:** `traffic-flows`. **Host port:** `21084` (WS+HTTP). **Env vars:**
 `TRAFFIC_EVENTS_PER_SEC` (default 50), `TRAFFIC_STORE_NAME`, `TRAFFIC_AGG_WRITE_SEC`.
 
-### Handoff to trv-homelab / homelab-deploy (the deploy session does these)
+### Handoff to trv-homelab / homelab-deploy — ✅ DONE (2026-06-17)
 
-5. trv-homelab: add the traffic schema-store spec to `roles/simulators/vars/main.yml`
-   — **copy the field list from `traffic-writer/schema.json`** (store
-   `traffic-flows`, `data_type: schema`, the 9 `{index,name,type}` fields).
-   Thread port **21084** through `defaults/main.yml` + `templates/simulators.env.j2`.
-6. homelab-deploy: update CLAUDE.md services/ports table (add traffic-writer @
-   21084); `make deploy-simulators`; verify `failed=0`, `traffic-flows` store
-   created, writer healthy, WS emitting, ts-store 0.8.3.
+5. ✅ trv-homelab (commit `ca85670`): `traffic-flows` schema store added to
+   `roles/simulators/vars/main.yml`; traffic-writer tunables surfaced in
+   `defaults/main.yml` + `simulators.env.j2`. (Host port 21084 is fixed in the
+   compose file — it didn't need an env var, contrary to the original note.)
+6. ✅ homelab-deploy (commit `7247d0e`): CLAUDE.md ports table updated.
+   `make deploy-simulators` ran clean (`failed=0`), idempotent (2nd run skips
+   schema-apply). Verified: traffic-writer Up (healthy) @ 21084, `traffic-flows`
+   store created (`data_type: schema`), **1038 aggregate flows written, 0 errors**,
+   `/schema` + `/aggregate` serving, ts-store still pinned 0.8.3.
+
+### ⚠️ Schema-types fix during deploy (commit `209e7de`, trv-outpost-sim)
+
+The deploy session corrected `traffic-writer/schema.go` + `schema.json`: they had
+declared bare `int`/`float` at **0-based** indexes, which **ts-store 0.8.3
+rejects** (verified in ts-store source `pkg/schema/schema.go` — `ValidFieldTypes`
+has only explicit widths `int64/int32/float64/…`, and indices are **1-based**).
+Now `int64`/`float64`/`string`, 1-based, matching the `sensor-readings` store and
+the role spec. **Do not revert this** — it's what makes ts-store writes succeed
+(the original was masked by the mock-only integration test). `validateSchema()`
+still passes; build + `go vet` clean.
 
 > The globe + Sankey dashboard components are a SEPARATE track in the dashboard
-> repo (`trv-outpost`), built from the spike configs after the sim feed is live.
+> repo (`trv-outpost`), built from the spike configs (`docs/spike/`) now that the
+> sim feed is live: `/aggregate` (static weighted arcs + Sankey) and `/ws` (live
+> flying arcs) on :21084.
 
 
 ## Goal
