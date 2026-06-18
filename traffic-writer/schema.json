@@ -2,49 +2,49 @@
     "data_type": "schema",
     "fields": [
         {
-            "index": 0,
+            "index": 1,
             "name": "timestamp",
-            "type": "int"
+            "type": "int64"
         },
         {
-            "index": 1,
+            "index": 2,
             "name": "country",
             "type": "string"
         },
         {
-            "index": 2,
+            "index": 3,
             "name": "cc",
             "type": "string"
         },
         {
-            "index": 3,
-            "name": "src_lat",
-            "type": "float"
-        },
-        {
             "index": 4,
-            "name": "src_lon",
-            "type": "float"
+            "name": "src_lat",
+            "type": "float64"
         },
         {
             "index": 5,
+            "name": "src_lon",
+            "type": "float64"
+        },
+        {
+            "index": 6,
             "name": "region",
             "type": "string"
         },
         {
-            "index": 6,
-            "name": "dst_lat",
-            "type": "float"
-        },
-        {
             "index": 7,
-            "name": "dst_lon",
-            "type": "float"
+            "name": "dst_lat",
+            "type": "float64"
         },
         {
             "index": 8,
+            "name": "dst_lon",
+            "type": "float64"
+        },
+        {
+            "index": 9,
             "name": "count",
-            "type": "int"
+            "type": "int64"
         }
     ],
     "store_name": "traffic-flows"

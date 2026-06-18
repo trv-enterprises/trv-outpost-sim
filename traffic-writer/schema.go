@@ -8,22 +8,27 @@ package main
 type SchemaField struct {
 	Index int    `json:"index"`
 	Name  string `json:"name"`
-	Type  string `json:"type"` // ts-store schema types: int | float | string
+	Type  string `json:"type"` // ts-store schema types (explicit width): int64|int32|float64|float32|string|bool
 }
 
 // trafficFlowSchema is the aggregated-flow record the ts-store writer emits.
 // The order here defines the indices. Mirrors the Flow JSON in data.go plus the
 // write-time `timestamp`. The Ansible role must declare exactly these fields.
+//
+// ts-store FieldType is an explicit-width string enum (see ts-store
+// pkg/schema/schema.go ValidFieldTypes): there is NO bare "int"/"float" — those
+// are rejected. Indices are 1-based. Emitted values: timestamp/count are int64,
+// coords are float64, labels are string.
 var trafficFlowSchema = []SchemaField{
-	{0, "timestamp", "int"},
-	{1, "country", "string"},
-	{2, "cc", "string"},
-	{3, "src_lat", "float"},
-	{4, "src_lon", "float"},
-	{5, "region", "string"},
-	{6, "dst_lat", "float"},
-	{7, "dst_lon", "float"},
-	{8, "count", "int"},
+	{1, "timestamp", "int64"},
+	{2, "country", "string"},
+	{3, "cc", "string"},
+	{4, "src_lat", "float64"},
+	{5, "src_lon", "float64"},
+	{6, "region", "string"},
+	{7, "dst_lat", "float64"},
+	{8, "dst_lon", "float64"},
+	{9, "count", "int64"},
 }
 
 // flowRecord builds the ts-store data payload for one flow, keyed by the schema
