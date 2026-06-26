@@ -229,6 +229,41 @@ services:
     labels:
       - "project=simulators"
 
+  # Counter writer - emits RAW monotonically-increasing counter columns to the
+  # `counters` ts-store schema store, as a test source for the Outpost
+  # dashboard's accumulator/delta transform (data_mapping.accumulator_columns +
+  # accumulator_reset_policy). Unlike the gauge writers, these are accumulating
+  # totals the dashboard must subtract to recover per-interval deltas. It can
+  # WRAP/RESET/SPIKE/FLAT/GAP a column on a schedule or on demand
+  # (POST :21085/trigger) to exercise every reset policy in seconds. The store
+  # is created by the deploy.
+  counter-writer:
+    build:
+      context: ./counter-writer
+      dockerfile: Dockerfile
+    container_name: simulators-counter-writer
+    ports:
+      - "21085:8086"
+    depends_on:
+      tsstore:
+        condition: service_healthy
+    environment:
+      COUNTER_PORT: 8086
+      COUNTER_STORE_NAME: ${COUNTER_STORE_NAME:-counters}
+      INTERVAL_MS: ${COUNTER_INTERVAL_MS:-1000}
+      TSSTORE_URL: http://tsstore:${TSSTORE_INTERNAL_PORT:-8080}
+      TSSTORE_API_KEY: ${TSSTORE_API_KEY}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--output-document=/dev/null", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - simulators_network
+    labels:
+      - "project=simulators"
+
 volumes:
   postgres_data:
   tsstore-data:

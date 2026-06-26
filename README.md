@@ -24,6 +24,7 @@ make down
 | REST API | `http://localhost:21082/api/*` | RESTful sensor data |
 | CSV | `http://localhost:21083/sensor_readings.csv` | Static CSV file |
 | PostgreSQL | `localhost:21432` | Timeseries database |
+| Counter writer | `http://localhost:21085` | Raw monotonic-counter test source (accumulator transform) |
 
 If you run the simulators on a remote host (e.g. a homelab container with its own IP), substitute that host's address for `localhost` in the endpoints above.
 
@@ -168,6 +169,43 @@ Static CSV available via HTTP.
 - `location` - Sensor location
 - `quality` - Data quality (0-100)
 - `status` - normal/warning/error
+
+## Counter Writer (accumulator test source)
+
+Emits **raw, monotonically-increasing counter columns** (odometers, packet
+counters, kWh meters) to the `counters` ts-store schema store. Unlike the other
+simulators — which emit instantaneous *gauges* — these are accumulating totals,
+so a consumer must subtract consecutive values to recover the per-interval
+delta. It exists to test the Outpost dashboard's accumulator transform
+(`data_mapping.accumulator_columns` + `accumulator_reset_policy`:
+`drop_negative` / `keep_negative` / `clamp_zero`).
+
+Each column ramps every tick and can **wrap / reset / spike / go flat / drop a
+gap** — on a schedule (so it self-exercises) or on demand, so you can drive
+every reset-policy branch in seconds instead of waiting hours for a real `/proc`
+counter to roll over.
+
+**Columns:** `bytes_total`, `packets_total` (auto-wraps), `requests_total`
+(auto-resets), `errors_total` (auto-spikes), `energy_wh` (auto-flat),
+`frames_total` (auto-gap). A gap omits the field (null point) — it must **not**
+read as a counter reset.
+
+**Force a behavior on demand:**
+```bash
+# Behaviors: ramp | wrap | reset | spike | flat | gap
+curl -X POST http://localhost:21085/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"column":"bytes_total","behavior":"reset"}'
+
+# Omit "column" (or use "*"/"all") to apply to every counter
+curl -X POST http://localhost:21085/trigger -d '{"behavior":"wrap"}'
+
+curl http://localhost:21085/config   # current values + per-column schedule
+curl http://localhost:21085/schema   # ts-store field contract
+```
+
+The `counters` schema store must be created by the deploy with the fields
+declared in `counter-writer/schema.go` (all `int64`).
 
 ## Configuration
 
