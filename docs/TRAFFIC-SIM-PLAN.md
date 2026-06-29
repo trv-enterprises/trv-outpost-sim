@@ -1,9 +1,9 @@
 # Traffic Simulator + Globe/Sankey — Plan & Handoff
 
-> **Status:** ✅ DEPLOYED & VERIFIED (2026-06-17). Sim built, schema-fixed, and
-> live on the simulators host — traffic-writer @ :21084, `traffic-flows` schema
-> store written with 0 errors against ts-store 0.8.3. Only the dashboard globe +
-> Sankey components remain (separate `trv-outpost` track). History below.
+> **Status:** ✅ COMPLETE (2026-06-29). Sim built, schema-fixed, and live on the
+> simulators host — traffic-writer @ :21084, `traffic-flows` schema store written
+> with 0 errors against ts-store 0.8.3. The dashboard globe + Sankey components
+> are also done (separate `trv-outpost` track). Nothing outstanding. History below.
 
 ## Spike outcome (2026-06-16) — see `docs/spike/`
 
@@ -106,10 +106,10 @@ the role spec. **Do not revert this** — it's what makes ts-store writes succee
 (the original was masked by the mock-only integration test). `validateSchema()`
 still passes; build + `go vet` clean.
 
-> The globe + Sankey dashboard components are a SEPARATE track in the dashboard
-> repo (`trv-outpost`), built from the spike configs (`docs/spike/`) now that the
-> sim feed is live: `/aggregate` (static weighted arcs + Sankey) and `/ws` (live
-> flying arcs) on :21084.
+> ✅ The globe + Sankey dashboard components (separate track in the dashboard repo
+> `trv-outpost`) are **complete** — built from the spike configs (`docs/spike/`)
+> against the live sim feed: `/aggregate` (static weighted arcs + Sankey) and
+> `/ws` (live flying arcs) on :21084.
 
 
 ## Goal
